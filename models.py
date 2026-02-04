@@ -1,5 +1,5 @@
 """
-models.py – SQLAlchemy ORM models for the Regatta System
+models.py - SQLAlchemy ORM models for the Regatta System
 
 This file defines all database tables used by the backend.
 
@@ -30,7 +30,6 @@ from sqlalchemy.orm import relationship
 
 # Base class that all ORM models inherit from
 from db import Base
-
 
 
 #  RACE TABLE
@@ -109,9 +108,9 @@ class Entry(Base):
 
     Fields:
         id
-        race_id     FK to Race
-        boat_id     FK to Boat
-        race        Relationship back to Race
+        race_id FK to Race
+        boat_id  FK to Boat
+        race  Relationship back to Race
     """
     __tablename__ = "entries"
 
@@ -150,16 +149,16 @@ class RaceDaySettings(Base):
     """
     Stores "today's race selection" in the database so it survives backend restarts.
     This supports the backup/deputy device user story (Priority 1 #7).
-    Reference: SQLAlchemy ORM mapping (Table + Columns)
+    Reference: SQLAlchemy ORM mapping (Table & Columns)
     """
     __tablename__ = "race_day_settings"
 
-    race_date = Column(Date, primary_key=True)         # e.g. 2025-11-14
-    course_id = Column(Integer, nullable=False)        # 1,2,3 from COURSES list
-    start_time = Column(String(20), nullable=True)     # store as text for simplicity
+    race_date = Column(Date, primary_key=True) # e.g. 2025-11-14
+    course_id = Column(Integer, nullable=False) # 1,2,3 from COURSES list
+    start_time = Column(String(20), nullable=True) # store as text for simplicity
 
 
-#  RACE START TABLE
+# RACE START TABLE
 # Reference: Using Date, Time, Float for race timing data [B4][B5]
 
 class RaceStart(Base):
@@ -199,10 +198,9 @@ class RaceStart(Base):
     elapsed_seconds = Column(Integer, nullable=True)
     corrected_seconds = Column(Float, nullable=True)
 
-     # NEW: OCS + penalty support (Priority 1 #5)
-    ocs = Column(Integer, nullable=False, default=0)      # 0/1 (MySQL TINYINT)
-    penalty_seconds = Column(Integer, nullable=True)      # added to elapsed
-
+     # NEW: OCS & penalty support (Priority 1 #5)
+    ocs = Column(Integer, nullable=False, default=0) # 0/1 (MySQL)
+    penalty_seconds = Column(Integer, nullable=True) # added to elapsed
 
     # ORM: RaceStart.boat gives full Boat object
     boat = relationship("Boat")

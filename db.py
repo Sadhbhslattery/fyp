@@ -20,7 +20,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # declarative_base: base class for SQLAlchemy ORM models
 
 
-#  LOAD ENVIRONMENT VARIABLES 
+# LOAD ENVIRONMENT VARIABLES 
 
 # Loads environment variables from a `.env` file into os.environ
 # Example .env:
@@ -95,7 +95,7 @@ Base = declarative_base()
 Summary:
 
 This file creates:
-    engine       - Connection to MySQL
+    engine  - Connection to MySQL
     SessionLocal - DB session factory used by app.py with Depends(get_db)
-    Base         - Used by all SQLAlchemy ORM models
+    Base - Used by all SQLAlchemy ORM models
 """

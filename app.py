@@ -11,7 +11,9 @@ This file contains:
   • User login for boat owners (by sail number and password)
   • Race start and finish recording
   • Corrected time calculation using rating_value (handicap)
-  • Race results per class
+  • Race results per class with finishing posittions
+  • Offical results codes (e.g. OCS) and time penalties
+  • Export of SailWave compatianle CSV files
   • Reset function to clear a race day's timings
 
 This backend is consumed by the Flutter frontend using Dio HTTP calls
@@ -21,7 +23,7 @@ import csv # Python CSV writer (standard library)
 import io # For in-memory text buffer (StringIO)
 
 from fastapi.responses import StreamingResponse  # Stream a CSV file download to the client
-# REFERENCE
+# Reference: FastAPI StreamingResponse for file/CSV downloads [B8]
 # StreamingResponse because it’s the standard way in FastAPI/Starlette to return a streamed file-like response (perfect for CSV downloads).
 
 from datetime import datetime, date, time, timedelta # Python standard library for date and time handling
@@ -60,7 +62,7 @@ from models import Race, Event, Boat, RaceStart, RaceDaySettings
 #   Race: race table (not heavily used in this iteration)
 #   Event: placeholder / future use
 #   Boat: each competitor boat (sail_no, class_name, rating_value, etc.)
-#   RaceStart: per boat, per day start/finish + timing info
+#   RaceStart: per boat, per day start/finish and timing info
 
 
 # APP SETUP 
@@ -71,14 +73,14 @@ app = FastAPI()
 # Add CORS middleware so the Flutter app can call the API from another origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Allow all origins (simpler for local dev)
-    allow_methods=["*"],   # Allow all HTTP methods (GET/POST/PUT/DELETE,…)
-    allow_headers=["*"],   # Allow all headers (e.g. Content-Type, Authorization)
+    allow_origins=["*"], # Allow all origins (simpler for local dev)
+    allow_methods=["*"], # Allow all HTTP methods (GET/POST/PUT/DELETE,…)
+    allow_headers=["*"], # Allow all headers (e.g. Content-Type, Authorization)
 )
 
 # Create tables on startup if they don't already exist in the database
 Base.metadata.create_all(engine)
-# Reference: SQLAlchemy engine + create_all to create tables [B4]
+# Reference: SQLAlchemy engine and create_all to create tables [B4]
 # This inspects all models attached to Base.metadata and creates missing tables
 
 
@@ -232,7 +234,7 @@ def list_races(db: Session = Depends(get_db)):
     return db.query(Race).all()
 
 
-# STATIC COURSES 
+# Static Courses
 # Reference: FastAPI path operations returning Pydantic models [B1][B3]
 # These come from RCYC course card and are used by the UI so the race officer
 # can select today's course
@@ -337,7 +339,7 @@ def select_course(body: SelectCourseRequest, db: Session = Depends(get_db)):
     """
     course_data = next((c for c in COURSES if c["id"] == body.course_id), None)
     if not course_data:
-        raise HTTPException(status_code=404, detail="Course not found")  # Add Reference 
+        raise HTTPException(status_code=404, detail="Course not found") 
 
     today = date.today()
 
@@ -370,15 +372,19 @@ def get_current_course(db: Session = Depends(get_db)):
 
     If none selected yet, return 404.
     Reads from DB so it survives restarts 
+
+    Reference: FastAPI dependency injection & response models [B1]
     """
     today = date.today()
+    # Retrieve today's race settings from the database
     settings = db.get(RaceDaySettings, today)
     if not settings:
-        raise HTTPException(status_code=404, detail="No race selected yet")  # :contentReference[oaicite:7]{index=7}
+        raise HTTPException(status_code=404, detail="No race selected yet")  
 
+    # Find the matching static course definition
     course_data = next((c for c in COURSES if c["id"] == settings.course_id), None)
     if not course_data:
-        raise HTTPException(status_code=404, detail="Course not found")  # :contentReference[oaicite:8]{index=8}
+        raise HTTPException(status_code=404, detail="Course not found")  
 
     return CurrentCourse(
         course=CourseModel(**course_data),
@@ -386,10 +392,9 @@ def get_current_course(db: Session = Depends(get_db)):
         race_date=today,
     )
 
-# Reference: FastAPI Routing Docs for @app.get/@app.post usage
 
 
-# BOATS & FLEET 
+# BOATS AND FLEET
 # Reference: Pydantic field_validator for class_name [B3]
 # List of valid fleet divisions; used for validation and UI filters
 CLASS_OPTIONS = ["White Sail 1", "White Sail 2", "Spinnaker 1", "Spinnaker 2"]
@@ -412,7 +417,7 @@ class BoatIn(BaseModel):
     class_name: str
     rating_value: float
 
-    @field_validator("class_name")  # Reference: Pydantic v2 Field Validator Docs
+    @field_validator("class_name")  # Reference: [B3]
     @classmethod
     def validate_class(cls, v: str) -> str:
         """
@@ -502,17 +507,17 @@ def user_login(body: UserLoginRequest, db: Session = Depends(get_db)):
 
     Steps:
       1. Find boat by sail_no.
-      2. If no boat found → success=False, "Boat not found".
+      2. If no boat found - success=False, "Boat not found".
       3. Check plain-text password against Boat.owner_password.
-      4. If mismatch → success=False, "Incorrect password".
-      5. If OK → success=True, message, and return boat info.
+      4. If mismatch - success=False, "Incorrect password".
+      5. If OK - success=True, message and return boat info.
     """
     boat = db.query(Boat).filter(Boat.sail_no == body.sail_no).first()
     if not boat:
         return UserLoginResponse(success=False, message="Boat not found")
 
     # NOTE: Simple plain-text password check (for prototype)
-    # In a production system, this should be hashed (e.g. bcrypt)
+    # When it is a production system, this should be hashed (e.g. bcrypt)
     if boat.owner_password != body.password:
         return UserLoginResponse(success=False, message="Incorrect password")
 
@@ -520,7 +525,7 @@ def user_login(body: UserLoginRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/boats", response_model=list[BoatOut])
-# Reference: FastAPI + SQLAlchemy to query/filter and return models [B2][B4]
+# Reference: FastAPI and SQLAlchemy to query/filter and return models [B2][B4]
 def list_boats(class_name: str | None = None, db: Session = Depends(get_db)):
     """
     List boats in the fleet.
@@ -622,7 +627,7 @@ class RaceStartIn(BaseModel):
     race_date: date
     start_time: time
 
-# Reference: SQLAlchemy Relationships (docs.sqlalchemy.org/orm/relationships)
+# Reference: SQLAlchemy Relationships [B11]
 # Reference: Pydantic models with date & time fields [B3][B5]
 
 
@@ -705,7 +710,7 @@ class RaceResultOut(BaseModel):
 
 
     class Config:
-        # Not built directly from a single ORM object; we construct it manually
+        # Not built directly from a single ORM object 
         from_attributes = False
 
 
@@ -728,7 +733,7 @@ def list_race_starts(
         .all()
     )
     return starts
-# Reference: FastAPI + SQLAlchemy query patterns (join, filter) [B2][B4]
+# Reference: FastAPI and SQLAlchemy query patterns (join, filter) [B2][B4]
 # Reference: datetime combination and timedelta arithmetic [B5]
 
 
@@ -824,7 +829,7 @@ def set_class_start(body: ClassStartIn, db: Session = Depends(get_db)):
     )
     return starts
 
-# Reference: FastAPI Path and Body Params Docs
+# Reference: FastAPI Path and Body Params Docs [B1]
 
 
 # GET BOAT START 
@@ -877,7 +882,7 @@ def set_penalty(body: PenaltyIn, db: Session = Depends(get_db)):
         .first()
     )
     if not start:
-        raise HTTPException(status_code=404, detail="No race record for boat/date")  # Reference 
+        raise HTTPException(status_code=404, detail="No race record for boat/date")  
 
     # Apply changes only if values are provided
     if body.ocs is not None:
@@ -886,7 +891,7 @@ def set_penalty(body: PenaltyIn, db: Session = Depends(get_db)):
     if body.penalty_seconds is not None:
         start.penalty_seconds = body.penalty_seconds
     elif body.penalty_seconds is None:
-        # If caller explicitly wants to clear, they send null; keep simple:
+        # If caller explicitly wants to clear, they send null. keep simple:
         pass
 
     # Recompute corrected if elapsed exists
@@ -910,7 +915,7 @@ def record_finish(body: RaceFinishIn, db: Session = Depends(get_db)):
     Admin presses 'Finish now' for a boat.
 
     This endpoint:
-      • Finds RaceStart entry for boat_id + race_date
+      • Finds RaceStart entry for boat_id & race_date
       • Sets finish_time
       • Computes elapsed_seconds (taking midnight into account)
       • Computes corrected_seconds = elapsed * rating_value
@@ -944,7 +949,7 @@ def record_finish(body: RaceFinishIn, db: Session = Depends(get_db)):
     # Set finish time
     start.finish_time = body.finish_time
 
-    # Combine date + start/finish times to form full datetimes
+    # Combine date & start/finish times to form full datetimes
     start_dt = datetime.combine(body.race_date, start.start_time)
     finish_dt = datetime.combine(body.race_date, body.finish_time)
 
@@ -971,7 +976,7 @@ def record_finish(body: RaceFinishIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(start)
     return start
-# Reference: FastAPI + SQLAlchemy query patterns (join, filter) [B2][B4]
+# Reference: FastAPI and SQLAlchemy query patterns (join, filter) [B2][B4]
 # Reference: datetime combination and timedelta arithmetic [B5]
 
 
@@ -1058,13 +1063,16 @@ def race_results_for_class(
 
     return results
 
-# Reference: FastAPI + SQLAlchemy query patterns (join, filter) [B2][B4]
+# Reference: FastAPI and SQLAlchemy query patterns (join, filter) [B2][B4]
 # Reference: datetime combination and timedelta arithmetic [B5]
+# Reference: Pydantic models (adding optional fields to response schemas) [B3]
+# Reference: World Sailing-style result codes and downstream scoring tools (e.g., Sailwave) [S1]
 
 
-# ------------------------------------------------------------
+
+
 # SAILWAVE CSV EXPORT (per race day, per class)
-# ------------------------------------------------------------
+
 # Sailwave supports importing race results from CSV using field names such as:
 # RaceNo, Elapsed, Start, Finish, Laps, Code, Place
 # and the guide shows an example CSV header like:
@@ -1078,7 +1086,6 @@ def _time_to_sailwave_str(t: time | None) -> str:
     Sailwave accepts times like:
     "HH:MM"
     "HH:MM:SS"
-    and it can also accept "HHMMSS" formats, but ":" is easier to read.
 
     If time is missing, return empty string (Sailwave import can handle blanks).
     Reference (Sailwave Dates & Times formatting rules):
@@ -1208,10 +1215,13 @@ def export_sailwave_race_csv(
         headers=headers,
     )
 
+# Reference: Python csv module for writing CSV rows [B8]
+# Reference: StreamingResponse for returning downloadable files in FastAPI/Starlette [B9]
+# Reference: Content-Disposition header to trigger file download in browsers [B10]
 
-# ------------------------------------------------------------
-# LEAGUE POINTS (low score wins)
-# ------------------------------------------------------------
+
+
+# League Points (low score wins)
 
 class LeaguePointsOut(BaseModel):
     """
@@ -1339,7 +1349,7 @@ def reset_race_day(
     deleted = q.delete(synchronize_session=False)
     db.commit()
 
-    # Reference: SQLAlchemy ORM Delete Rules
+    # Reference: SQLAlchemy ORM Delete Rules [B12]
     # (Cannot call delete() on queries that use join()/outerjoin().)
 
     return {"deleted": deleted}
