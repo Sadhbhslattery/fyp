@@ -39,7 +39,7 @@
     },
     {
       "name": "dio",
-      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/dio-5.9.0",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/dio-5.9.1",
       "packageUri": "lib/",
       "languageVersion": "2.18"
     },
@@ -70,6 +70,12 @@
     {
       "name": "flutter_test",
       "rootUri": "file:///Users/sadhbhslattery/development/flutter/packages/flutter_test",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
+    },
+    {
+      "name": "flutter_web_plugins",
+      "rootUri": "file:///Users/sadhbhslattery/development/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
@@ -134,6 +140,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "plugin_platform_interface",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/plugin_platform_interface-2.1.8",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "sky_engine",
       "rootUri": "file:///Users/sadhbhslattery/development/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
@@ -180,6 +192,54 @@
       "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/typed_data-1.4.0",
       "packageUri": "lib/",
       "languageVersion": "3.5"
+    },
+    {
+      "name": "url_launcher",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher-6.3.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "url_launcher_android",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_android-6.3.28",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "url_launcher_ios",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_ios-6.3.6",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "url_launcher_linux",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_linux-3.2.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
+    },
+    {
+      "name": "url_launcher_macos",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_macos-3.2.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "url_launcher_platform_interface",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_platform_interface-2.3.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.1"
+    },
+    {
+      "name": "url_launcher_web",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_web-2.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "url_launcher_windows",
+      "rootUri": "file:///Users/sadhbhslattery/.pub-cache/hosted/pub.dev/url_launcher_windows-3.1.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
     },
     {
       "name": "vector_math",
