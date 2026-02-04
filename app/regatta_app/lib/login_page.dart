@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart'; // Flutter UI framework
 import 'package:dio/dio.dart';  // HTTP client for calling the backend
+import 'package:regatta_app/theme/app_theme.dart';
 import 'fleet_admin_page.dart';  // Screen to open after successful login
 
 // LoginPage is a StatefulWidget because:
@@ -146,7 +147,7 @@ class _LoginPageState extends State<LoginPage> {
                       child: Text(
                         errorMessage!,               // Show the error text
                         style: const TextStyle(
-                          color: Colors.red,         // Red to indicate a problem
+                          color: AppTheme.danger,         // Red to indicate a problem
                           fontWeight: FontWeight.bold,
                         ),
                       ),

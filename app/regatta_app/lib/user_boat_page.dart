@@ -14,7 +14,8 @@
 //  How they performed relative to other boats in their class
 
 import 'package:flutter/material.dart'; // Flutter widgets & layout
-import 'package:dio/dio.dart';  // HTTP client for calling the backend
+import 'package:dio/dio.dart';
+import 'package:regatta_app/theme/app_theme.dart';  // HTTP client for calling the backend
 
 // UserBoatPage is a stateful widget because:
 // it loads data asynchronously from the backend and the course/results can change over time
@@ -282,7 +283,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
                           padding: const EdgeInsets.all(16),
                           child: Text(
                             courseError ?? "No race selected yet.",
-                            style: const TextStyle(color: Colors.grey),
+                            style: const TextStyle(color: AppTheme.surface2),
                           ),
                         ),
                       )
@@ -334,7 +335,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
 
     return Card(
       // Light background to differentiate from the other cards
-      color: Colors.deepPurple.shade50,
+      color: AppTheme.primary,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -388,7 +389,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
           padding: const EdgeInsets.all(16),
           child: Text(
             resultsError ?? "No timing data yet for your class today.",
-            style: const TextStyle(color: Colors.grey),
+            style: const TextStyle(color: AppTheme.surface2),
           ),
         ),
       );
@@ -397,7 +398,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     // If there IS data, render it as a horizontal-scrollable DataTable
     // Reference: DataTable and styling with TextStyle [F6]
     return Card(
-      color: Colors.blueGrey.shade50,
+      color: AppTheme.primary,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

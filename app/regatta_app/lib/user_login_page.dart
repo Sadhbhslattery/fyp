@@ -25,6 +25,7 @@
 
 import 'package:flutter/material.dart'; // Flutter UI components
 import 'package:dio/dio.dart';  // HTTP client for backend requests 
+import 'package:regatta_app/theme/app_theme.dart';
 // Reference: Dio for HTTP requests [D1], login form similar pattern as admin login [F4]
 import 'user_boat_page.dart';   // Next screen after successful login
 
@@ -134,7 +135,7 @@ class _UserLoginPageState extends State<UserLoginPage> {
             if (error != null)
               Text(
                 error!,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: AppTheme.danger),
               ),
 
             //  SAIL NUMBER INPUT 

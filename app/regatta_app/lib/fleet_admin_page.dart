@@ -10,6 +10,7 @@
 
 import 'package:flutter/material.dart'; // Flutter UI framework (widgets, Material design)
 import 'package:dio/dio.dart'; // Dio is the HTTP client used to call the FastAPI backend
+import 'package:regatta_app/theme/app_theme.dart';
 // Reference: Flutter Material UI (Scaffold, AppBar, ListView) [F1][F3][F5]
 // Reference: Dio client configuration [D1]
 
@@ -411,7 +412,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
               child: const Text('Cancel')),
           // Delete button: calls DELETE /boats/{id}
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             onPressed: () async {
               await dio.delete('/boats/${boat['id']}');
               if (context.mounted) Navigator.pop(context, true);
