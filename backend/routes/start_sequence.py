@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from db import get_db
 # Imports the get_db function that provides database sessions via dependency injection.
 
-from backend.models import StartSequence
+from models import StartSequence
 # Imports the StartSequence ORM model representing the start_sequences table.
 
 router = APIRouter(
