@@ -1,19 +1,25 @@
-// This screen is used by the Race Officer (admin) to:
-// - View the predefined list of courses from the backend
-// - See details like course name, wind direction, description and rounds
-// - Choose which course is "today's race"
-// - Set a start time for today's race (e.g. 18:30)
-// - Send this selection to the backend via /select-course
+// Lets race officer select today's course and start time. The app:
+// 1. Loads predefined courses from backend (Course 1, 2, 3)
+// 2. Displays each course with description, wind, and rounds
+//  3. Race officer taps "Set for today" on chosen course
+// 4. Dialog prompts for start time (e.g., "18:30")
+// 5. Sends POST /select-course with course_id and start_time
+// 6. Shows success SnackBar
+
+// _loadCourses(): GET /courses, stores in List<dynamic>
+// _selectCourse(course): Shows confirmation dialog, POST /select-course
+// build(): ListView of course cards
+
 
 import 'package:flutter/material.dart'; // Flutter UI widgets & layout
-import 'package:dio/dio.dart';           // HTTP client used to call FastAPI backend
+import 'package:dio/dio.dart';  // HTTP client used to call FastAPI backend
 // Reference: Dio GET request to load list data [D1]
 // Reference: Stateful widget and async init pattern [F1][F8]
 
 // Stateful widget because we:
-// - load data from the backend
-// - show loading & error states
-// - update the UI once the user selects a course
+// load data from the backend
+// show loading and error states
+// update the UI once the user selects a course
 class RaceSelectionPage extends StatefulWidget {
   const RaceSelectionPage({super.key});
 
@@ -22,12 +28,12 @@ class RaceSelectionPage extends StatefulWidget {
 }
 
 // The state class holds all mutable data:
-// - list of courses from backend
-// - loading & error flags
-// - info message after setting today's race
+// list of courses from backend
+// loading and error flags
+// info message after setting today's race
 class _RaceSelectionPageState extends State<RaceSelectionPage> {
   // HTTP client with base URL pointing to your FastAPI backend
-  // All calls like dio.get("/courses") → http://127.0.0.1:8000/courses
+  // All calls like dio.get("/courses") -  http://127.0.0.1:8000/courses
   final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
 
   // List of course objects returned from backend
@@ -49,11 +55,11 @@ class _RaceSelectionPageState extends State<RaceSelectionPage> {
   void initState() {
     super.initState();
     _loadCourses(); // Trigger the API call to get the list of courses
-    // Reference: asynchronous HTTP call + error handling [D1][F8]
+    // Reference: asynchronous HTTP call and error handling [D1][F8]
 
   }
 
-  // LOAD COURSES FROM BACKEND
+  // Load Courses from backend
 
 
   // Fetches courses from GET /courses and updates the UI
@@ -87,7 +93,7 @@ class _RaceSelectionPageState extends State<RaceSelectionPage> {
   }
 
  
-  // SELECT COURSE FOR TODAY
+  // Select Course for Today
 
 
   // Called when the Race Officer taps "Set for today" on a course card
@@ -100,7 +106,7 @@ class _RaceSelectionPageState extends State<RaceSelectionPage> {
   Future<void> _selectCourse(Map<String, dynamic> course) async {
     // Text field controller for the start time input inside the dialog
     // Defaults to 10:30 for convenience.
-    // Reference: showDialog with AlertDialog & TextField [F7][F4]
+    // Reference: showDialog with AlertDialog and TextField [F7][F4]
     // Reference: Dio POST with JSON body [D1]
 
     final timeController = TextEditingController(text: "10:30");
@@ -173,7 +179,7 @@ class _RaceSelectionPageState extends State<RaceSelectionPage> {
   }
 
 
-  // BUILD UI
+  // Build UI
 
   /// The build method describes how this screen looks
   @override
@@ -279,3 +285,21 @@ class _RaceSelectionPageState extends State<RaceSelectionPage> {
     );
   }
 }
+
+// Summary
+// Simple course picker with:
+// Card-based UI showing course details
+// Confirmation dialog with start time input
+// Backend persistence via POST /select-course
+// SnackBar feedback on success/failure
+
+// Reference: StatefulWidget for async course loading [F14]
+// Reference: ListView.builder for course cards [F5]
+// Reference: Card for course display [F19]
+// Reference: AlertDialog for start time input [F18]
+// Reference: TextField for time input [F4]
+// Reference: TextEditingController for form management [F4]
+// Reference: Dio GET/POST methods [D1][D3]
+// Reference: FastAPI course endpoints [B1]
+// Reference: SnackBar for feedback [F7]
+// Reference: CircularProgressIndicator for loading [F1]

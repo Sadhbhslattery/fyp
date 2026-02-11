@@ -1,12 +1,19 @@
-// This screen is for the Race Officer / Admin
-// It lets them:
-// - View the RCYC fleet (boats)
-// - Filter by class (White Sail / Spinnaker)
-// - Search by sail number or boat name
-// - Add new boats
-// - Edit existing boats
-// - Delete boats
-// - Navigate to: race selection, start times and results pages
+// This is the main admin screen after login. It provides complete fleet management:
+
+// View all boats in the RCYC fleet
+// Filter by class (White Sail 1/2, Spinnaker 1/2)
+// Search by sail number or boat name
+// Add new boats (form dialog)
+// Edit existing boats (pre-filled form dialog)
+// Delete boats (with confirmation)
+// Navigate to race selection, timing, and results pages
+
+// Key Architecture Patterns
+// Master-Detail Pattern: List of boats with tap-to-edit
+// CRUD Operations: Create, Read, Update, Delete via REST API
+// Filtering: Server-side (class) and client-side (search)
+// Dialog Forms: Reusable AlertDialog with Form widgets
+
 
 import 'package:flutter/material.dart'; // Flutter UI framework (widgets, Material design)
 import 'package:dio/dio.dart'; // Dio is the HTTP client used to call the FastAPI backend
@@ -75,7 +82,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
     _loadBoats();
   } // Reference: StatefulWidget, initState, setState lifecycle [F1]
 
-  //  LOAD BOATS FROM BACKEND 
+  //  Load boats from backend
 
   // This method calls GET /boats on my FastAPI backend and updates the state.
   // It also applies:
@@ -131,12 +138,12 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
     }
   }
 
-  //  ADD BOAT DIALOG 
+  //  Add boat dialog
 
   // Opens a popup dialog so the admin can add a new boat
   // When the user presses "Save", it sends POST /boats to the backend
-  // Reference: showDialog & AlertDialog pattern [F7]
-  // Reference: Form + TextFormField validation [F4]
+  // Reference: showDialog and AlertDialog pattern [F7]
+  // Reference: Form and textFormField validation [F4]
 
   Future<void> _showAddBoatDialog() async {
     // Create controllers for each of the text fields inside the dialog
@@ -271,7 +278,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
     if (result == true) _loadBoats();
   }
 
-  //  EDIT BOAT DIALOG 
+  //  Edit boat dialog
 
   // Opens a dialog with existing boat details pre-filled, so the admin can update them. Calls PUT /boats/{id}.
   // Reference: Edit dialog using Form and TextFormField [F4][F7]
@@ -390,7 +397,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
     if (result == true) _loadBoats();
   }
 
-  //  DELETE BOAT CONFIRMATION
+  //  Delete Boat Confirmation
 
   // Prompts the admin to confirm they really want to delete a boat, then calls DELETE /boats/{id} if they confirm
   // Reference: Confirmation dialogs, then Dio DELETE [F7][D1]
@@ -423,11 +430,11 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
       ),
     );
 
-    // If result == true, deletion happened => reload the fleet
+    // If result == true, deletion happened - reload the fleet
     if (result == true) _loadBoats();
   }
 
-  //  BUILD UI 
+  //  Build UI
 
   // The build method describes how to display this screen
   // It returns a Scaffold (app structure) containing AppBar, body and FAB
@@ -438,14 +445,14 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
     return Scaffold(
       // The bar at the top with the title and navigation icons
       appBar: AppBar(
-        title: const Text('RCYC Fleet'), // Screen title text
+        title: const Text('RCYC Fleet'),  // Screen title text
 
         // Actions are the small icon buttons on the right side of the AppBar
         actions: [
           // Flag icon: go to page where admin selects today's race/course
           IconButton(
             icon: const Icon(Icons.flag),
-            tooltip: "Select today's race", // Tooltip shown on long press
+            tooltip: "Select today's race",  // Tooltip shown on long press
             onPressed: () {
               // Navigator.push opens a new page on top of the current one
               Navigator.push(
@@ -485,14 +492,14 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
         child: Column(
           // Column stacks children vertically: search bar, filters, list of boats
           children: [
-            // SEARCH BAR 
+            // Search Bar
             TextField(
               controller: _searchController, // Connects text field to the controller
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search), // Magnifying glass icon
+                prefixIcon: const Icon(Icons.search),  // Magnifying glass icon
                 hintText: 'Search by sail number or name',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12), // Rounded corners
+                  borderRadius: BorderRadius.circular(12),  // Rounded corners
                 ),
               ),
               // Whenever the user types, we call _loadBoats to apply search filter
@@ -501,7 +508,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
 
             const SizedBox(height: 10), // Small gap below search bar
 
-            //  CLASS FILTER CHIPS 
+            // Class Filter Chips
             // Horizontally scrollable row of ChoiceChips for All/White Sail/Spinnaker
             // Reference: TextField for live search, ChoiceChip for filters [F1]
             SingleChildScrollView(
@@ -527,9 +534,8 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
             ),
 
             const SizedBox(height: 10),
-
-            // LIST OF BOATS (OR LOADING/ERROR STATES)
-            // Reference: ListView.builder + Card + ListTile UI pattern [F5]
+            // List of Boats (or Loading/error status)
+            // Reference: ListView.builder and Card and ListTile UI pattern [F5]
 
             Expanded(
               // Expanded tells the Column that this child should take up all remaining space
@@ -583,7 +589,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
                                       '${b['class_name']} • Rating: ${b['rating_value']}',
                                     ),
 
-                                    // trailing: widgets on the right side (club + delete icon)
+                                    // trailing: widgets on the right side (club and delete icon)
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize
                                           .min, // Take only as much width as needed
@@ -619,15 +625,38 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
         ),
       ),
 
-      // FLOATING "ADD BOAT" BUTTON 
+      // Floating 'add boat' button
       // Reference: FloatingActionButton.extended for primary action [F3]
 
       floatingActionButton: FloatingActionButton.extended(
         onPressed:
             _showAddBoatDialog, // When pressed, open the Add Boat dialog
-        icon: const Icon(Icons.add), // "+" icon
+        icon: const Icon(Icons.add), // "plus" icon
         label: const Text('Add boat'), // Text label next to the icon
       ),
     );
   }
 }
+// Summary 
+// Complete fleet management interface with:
+// 1. Real-time search and class filtering
+// 2. CRUD operations via dialogs
+// 3. Navigation to other admin pages
+// 4. Clean Material Design UI with cards and icons
+
+// Reference: StatefulWidget for async data operations [F14]
+// Reference: ListView.builder for dynamic boat list [F5]
+// Reference: Card and ListTile for boat display [F19][F5]
+// Reference: CircleAvatar for visual identifiers [F25]
+// Reference: FloatingActionButton for add action [F1]
+// Reference: AlertDialog for add/edit forms [F18]
+// Reference: Form validation with GlobalKey [F4]
+// Reference: TextFormField with validators [F4]
+// Reference: DropdownButtonFormField for class selection [F1]
+// Reference: ChoiceChip for class filtering [F24]
+// Reference: Dio GET/POST/PUT/DELETE methods [D1][D3]
+// Reference: FastAPI CRUD endpoints [B1]
+// Reference: Query parameters for filtering [B11]
+// Reference: SnackBar for feedback [F7]
+// Reference: Navigator for navigation [F28]
+// Reference: RefreshIndicator for pull-to-refresh [F27]

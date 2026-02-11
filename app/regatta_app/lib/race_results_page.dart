@@ -1,11 +1,12 @@
+
 // This screen displays the full race results for the selected day
 // It groups boats by class (White Sail 1, Spinnaker 1, etc.) and shows a sortable table including:
-//  - Sail Number
-// - Boat Name
-// - Rating
-// - Elapsed Time
-// - Code
-// - Corrected Time
+// Sail Number
+// Boat Name
+// Rating
+// Elapsed Time
+// Code
+// Corrected Time/ Final position 
 
 // The data comes from the FastAPI backend via `/race-results` and updates automatically based on today's date
 
@@ -13,13 +14,31 @@ import 'package:flutter/material.dart'; // Flutter UI framework
 import 'package:dio/dio.dart'; // HTTP client package for API requests
 import 'package:url_launcher/url_launcher.dart'; // Opens the export CSV link in browser (download/share)
 
-/// RaceResultsPage is a stateful widget because:
-/// - It loads data from the network
-/// - It needs to update when results arrive
-/// - It manages loading/error states
-///
-/// NEW Iteration 3:
-/// - `isAdmin` controls whether admin-only UI (Export button) is shown
+// RaceResultsPage is a stateful widget because:
+// It loads data from the network
+// It needs to update when results arrive
+// It manages loading/error states
+
+
+// `isAdmin` controls whether admin-only UI (Export button) is shown
+// Key Architecture Patterns
+// 1. Two-phase loading: GET /boats to find classes, then GET /race-results for each class
+// 2. Grouped display: Card per class with DataTable inside
+// 3. Admin feature flag: widget.isAdmin controls export button visibility
+// 4. Sailwave integration: Exports results in format compatible with Sailwave scoring software
+// Summary of Key Methods
+// _loadResults(): 
+  // 1. GET /boats to extract class names
+  // 2. For each class: GET /race-results?race_date=...&class_name=...
+  // 3. Store in resultsByClass map
+// _formatDuration(): Converts seconds to HH:MM:SS string
+// _exportSailwaveCsv(): 
+  // 1. SimpleDialog to select class
+  // 2. AlertDialog to enter race number
+  // 3. Build URL: /export/sailwave-race-csv?race_date=...&class_name=...&race_no=...
+  // 4. launchUrl() to open in browser (triggers download)
+// _buildClassTable(): Creates Card with class name and DataTable
+
 class RaceResultsPage extends StatefulWidget {
   const RaceResultsPage({
     super.key,
@@ -158,7 +177,7 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
   }
 
 
-  // ADMIN EXPORT: Export current day's results to Sailwave CSV
+  // Admin Export: Export current day's results to Sailwave CSV
 
 
   // Sailwave can import race results from CSV and recognises result fields such as:
@@ -252,7 +271,7 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
     // Step 3: Build the export URL
   
     // IMPORTANT:
-    // - Using dio.options.baseUrl so it always matche the backend host.
+    // - Using dio.options.baseUrl so it always matches the backend host.
     // - The backend endpoint should be:
     // GET /export/sailwave-race-csv?race_date=YYYY-MM-DD&class_name=...&race_no=...
 
@@ -314,19 +333,19 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
       body: Padding(
         padding: const EdgeInsets.all(12),
 
-        // LOADING STATE
+        // Loading state
         child: loading
             ? const Center(child: CircularProgressIndicator())
 
-            // ERROR STATE
+            // Error state
             : error != null
                 ? Center(child: Text(error!))
 
-                // NO RESULTS FOUND
+                // No results found
                 : resultsByClass.isEmpty
                     ? const Center(child: Text("No results yet for today."))
 
-                    // RESULTS FOUND - SHOW THE TABLES
+                    // Results found - show the tables
                     : ListView(
                         children: [
                           // Loop through each class:
@@ -360,7 +379,7 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            //  Class Name Table
+            // Class Name Table
             Text(
               className,
               style: const TextStyle(
@@ -416,3 +435,26 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
     );
   }
 }
+// Summary
+// Professional results display with:
+// 1. Grouped by class in expandable cards
+// 2. DataTable for clean tabular layout
+// 3. Time formatting (HH:MM:SS)
+// 4. Admin-only export to Sailwave CSV
+// 5. Handles OCS codes and penalties correctly
+
+// Reference: StatefulWidget for async results loading [F14]
+// Reference: DataTable for results display [F6]
+// Reference: SingleChildScrollView for horizontal scrolling [F5]
+// Reference: Card for class grouping [F19]
+// Reference: SimpleDialog for class selection [F16]
+// Reference: AlertDialog for race number input [F18]
+// Reference: TextField for input [F4]
+// Reference: TextEditingController for form management [F4]
+// Reference: Dio GET request [D1][D3]
+// Reference: FastAPI results endpoint [B1]
+// Reference: Query parameters for filtering [B11]
+// Reference: url_launcher package for CSV download [F17]
+// Reference: Uri.parse for URL construction [F17]
+// Reference: Sailwave CSV format specification [S1][S2]
+// Reference: CircularProgressIndicator for loading [F1]

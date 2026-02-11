@@ -1,31 +1,40 @@
-// lib/theme/app_theme.dart
+// This file defines my app's visual design system - all the colors, fonts, button styles, input styles, and other visual elements. 
+// It creates a consistent look and feel throughout the entire app.
+// Instead of saying "make this button blue" in every page, I define the button style once here, and every button in the app automatically looks correct.
+
+// This theme is specifically designed for outdoor sailing use:
+// High contrast (white text on dark backgrounds) for outdoor readability in bright sunlight
+// Semantic colors (green=OK, red=penalty/OCS) for quick status recognition
+// Clear visual hierarchy (large countdown timers, obvious action buttons)
+// Minimal eye strain for prolonged use
+
 import 'package:flutter/material.dart';
+// The import brings in Flutter's Material Design widgets and theming system.
 
-/// RCYC Regatta Timing App Theme
-/// Sailor-first: high contrast, outdoor readable, fast status recognition.
+
 class AppTheme {
-  // ---- Base / Structure ----
-  static const Color bg = Color(0xFF121417);       // Scaffold background
+  // Base / Structure
+  static const Color bg = Color(0xFF121417);  // Scaffold background
   static const Color surface = Color(0xFF1E2329);  // Cards / panels
-  static const Color surface2 = Color(0xFF171B20); // Slightly darker surface
-  static const Color border = Color(0xFF2F3640);   // Dividers / outlines
+  static const Color surface2 = Color(0xFF171B20);  // Slightly darker surface
+  static const Color border = Color(0xFF2F3640);  // Dividers / outlines
 
-  // ---- Text ----
+  // Text 
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFD1D5DB);
   static const Color textMuted = Color(0xFF9CA3AF);
   static const Color disabled = Color(0xFF6B7280);
 
-  // ---- Brand / Actions ----
+  // Brand / Actions 
   static const Color primary = Color(0xFF2563EB);  // Main action (Start/Save/Continue)
   static const Color primarySoft = Color(0x332563EB);
 
-  // ---- Status / Race semantics ----
-  static const Color ok = Color(0xFF16A34A);       // Valid finish / good
-  static const Color info = Color(0xFF2563EB);     // Started / informational
-  static const Color warn = Color(0xFFF59E0B);     // Pending / attention
-  static const Color danger = Color(0xFFDC2626);   // OCS / Penalty / Error
-  static const Color live = Color(0xFF22D3EE);     // Countdown / “live” timing accent
+  // Status / Race semantics 
+  static const Color ok = Color(0xFF16A34A);  // Valid finish / good
+  static const Color info = Color(0xFF2563EB);  // Started / informational
+  static const Color warn = Color(0xFFF59E0B);  // Pending / attention
+  static const Color danger = Color(0xFFDC2626);  // OCS / Penalty / Error
+  static const Color live = Color(0xFF22D3EE);  // Countdown / “live” timing accent
 
   /// Use in MaterialApp(theme: AppTheme.darkTheme)
   static final ThemeData darkTheme = ThemeData(
@@ -55,7 +64,7 @@ class AppTheme {
       centerTitle: false,
     ),
 
-    // Cards (NOTE: CardThemeData for your Flutter version)
+    // Cards 
     cardTheme: CardThemeData(
       color: surface,
       elevation: 0,
@@ -72,7 +81,7 @@ class AppTheme {
       space: 24,
     ),
 
-    // TextTheme: base it on ThemeData.dark() to avoid TextStyle lerp/inherit crashes
+    // TextTheme: base it on ThemeData.dark() to avoid TextStyle inherit crashes
     textTheme: ThemeData.dark().textTheme.copyWith(
       headlineSmall: const TextStyle(
         color: textPrimary,
@@ -209,7 +218,7 @@ class AppTheme {
     ),
   );
 
-  // ---- OPTIONAL: convenience helpers for semantic colours in your widgets ----
+  // OPTIONAL: convenience helpers for semantic colours in the widgets
   static Color statusColor(String? code) {
     // e.g. "OCS", "DNF", "RET", "DSQ" etc.
     if (code == null || code.isEmpty) return ok;
@@ -219,3 +228,11 @@ class AppTheme {
     return ok;
   }
 }
+
+// References for this page
+// Flutter Material Design 3 theming system [F11]
+// ThemeData configuration and customization [F11]
+// ColorScheme class for semantic color definitions [F12]
+// TextStyle for consistent typography [F13]
+// Dark theme design guidelines for accessibility [A2]
+// WCAG 2.1 contrast ratio requirements [A1]

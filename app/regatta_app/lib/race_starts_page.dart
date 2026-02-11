@@ -1,26 +1,52 @@
-// This screen is used by the Race Officer (admin) to:
-//  Set class start times (e.g., all White Sail 1 boats start at 18:30:00)
-//  Record a finish time for each individual boat
-//  View start, finish, and elapsed times for every boat
-//  Reset the day’s timings if something goes wrong
+// Race Starts Page
 
-// This page interacts with the backend via FastAPI endpoints such as:
-//   /boats
-//   /race-starts
-//   /race-starts/class-start
-//   /race-finish
-//   /race-day
+// This screen allows the Race Officer to:
+// Set class start times (stored in DB via POST /race-starts/class-start)
+// Fire the 5-minute gun (stored in DB via POST /start-sequence/start)
+// View a live countdown and preparatory flag (read from DB via GET /start-sequence/status)
+// See boats currently racing and finished, grouped by class (boats and race-start rows joined in UI)
+// Record finishes (writes finish_time and options to DB via POST /race-finish)
+// Refresh data manually (Refresh button) or by pull-to-refresh
 
-// The UI automatically groups boats by class and allows fast race-day operation
+// DATABASE IN PLAIN ENGLISH
+// This page joins two tables in the UI:
+// boats table: Permanent boat details (id, sail_no, name, class_name)
+// race_starts table: Per-boat, per-day timing (race_date, start_time, finish_time, elapsed_seconds)
+// The page:
+// 1. GET /boats - loads all boats
+// 2. GET /race-starts?race_date=... - loads today's timing rows
+// 3. Creates map: startsByBoatId[boat_id] = timing_record
+// 4. UI determines state by checking timing record:
+// Not started: start_time is in future or null
+// In progress: now >= start_time AND finish_time == null
+// Finished: finish_time != null
 
-import 'package:flutter/material.dart'; // Flutter widgets and layout tools
-import 'package:dio/dio.dart'; // HTTP client for backend communication
+// Two-Timer Countdown Architecture
+// Similar to user start sequence page:
+// Poll timer (2 seconds): Fetches latest sequence from backend
+// Tick timer (1 second): Updates countdown locally
+// Shows preparatory flag until 1-minute mark
+// Displays MM:SS countdown
 
-// Stateful widget because the page updates dynamically:
-// - loading boats
-// - updating class start times
-// - recording individual finishes
-// - refreshing after POST requests
+// _loadData(): GET /boats and GET /race-starts, builds startsByBoatId map
+// _parseStartDateTimeUtc(): Converts "HH:MM:SS" string to DateTime for comparisons
+// _hasStarted(boat): Returns true if now >= scheduled start time
+// _hasFinished(boat): Returns true if finish_time != null
+// _inProgress(boat): Returns _hasStarted && !_hasFinished
+// _setClassStart(className): Dialog for time input, POST /race-starts/class-start
+// _fireFiveMinuteGun(className): Calls StartSequenceApi.start()
+// _finishBoatWithOptions(boat): Bottom sheet with OCS toggle and penalty input, POST /race-finish
+
+
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+
+import 'services/start_sequence_api.dart';
+import 'ui/flags/flag_chip.dart';
+
+final StartSequenceApi startSeqApi = StartSequenceApi('http://127.0.0.1:8000');
+
 class RaceStartsPage extends StatefulWidget {
   const RaceStartsPage({super.key});
 
@@ -28,94 +54,47 @@ class RaceStartsPage extends StatefulWidget {
   State<RaceStartsPage> createState() => _RaceStartsPageState();
 }
 
-// The State class holds all mutable data used by this screen
 class _RaceStartsPageState extends State<RaceStartsPage> {
-  // HTTP client that automatically talks to FastAPI at localhost:8000
   final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
 
-  // Full list of boats fetched from backend (/boats)
   List<dynamic> boats = [];
-
-  // Mapping of boat_id - timing record (start_time, finish_time, elapsed_seconds)
-  // Allows instant lookup of timing data for each boat
   Map<int, Map<String, dynamic>> startsByBoatId = {};
 
-  // Controls spinner visibility while data loads
   bool loading = true;
-
-  // Error text if something goes wrong with loading
   String? error;
 
-  // Today's date ("YYYY-MM-DD") is used as API parameter for all race-related endpoints
-  // Reference: Dart DateTime and string formatting (padLeft) [F8]
   late String todayDate;
 
 
-  // BOAT STATE HELPERS (Started/Finished)
+  // Start Sequence 
 
-  // Returns true if this boat has a start record for today and has a start_time set.
-  // Using startsByBoatId (boat_id - timing record) to check race-day status.
-  bool _hasStarted(Map<String, dynamic> boat) {
-    // boat["id"] is the database ID for this boat
-    final boatId = boat["id"] as int;
+  StartSequenceStatusDto? startSequence;
+  String? selectedSequenceClass;
+  String? startSequenceError;
 
-    // Look up today's timing record for this boat
-    final startRecord = startsByBoatId[boatId];
+  Timer? pollTimer;
+  Timer? tickTimer;
+  DateTime? serverNowUtc;
 
-    // If there is a record and start_time is not null, the boat has started
-    return startRecord != null && startRecord["start_time"] != null;
-  }
-
-  // Returns true if this boat has a finish_time set for today.
-  bool _hasFinished(Map<String, dynamic> boat) {
-    final boatId = boat["id"] as int;
-    final startRecord = startsByBoatId[boatId];
-
-    // If finish_time exists, the boat is finished
-    return startRecord != null && startRecord["finish_time"] != null;
-  }
-
-  // List of boats that are currently "in progress":
-  // - must have started
-  // - must NOT have finished
-  List<Map<String, dynamic>> get inProgressBoats {
-    return boats
-        // Convert each dynamic boat into a Map<String, dynamic>
-        .map((b) => Map<String, dynamic>.from(b as Map))
-        // Keep only boats that have started and not finished
-        .where((boat) => _hasStarted(boat) && !_hasFinished(boat))
-        .toList();
-  }
-
-  // List of boats that are finished:
-  // - must have a finish_time
-  List<Map<String, dynamic>> get finishedBoats {
-    return boats
-        .map((b) => Map<String, dynamic>.from(b as Map))
-        .where((boat) => _hasFinished(boat))
-        .toList();
-  }
-
-  /// initState runs once when the widget appears
   @override
   void initState() {
     super.initState();
-
-    // Build today's date as a formatted string
     final now = DateTime.now();
     todayDate =
         "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-
-    // Load boats + timing records
-    // Reference: multiple Dio GET requests and mapping JSON to Dart Maps [D1][F8]
     _loadData();
   }
 
-  // LOAD BOATS AND START/FINISH TIMES FOR TODAY
+  @override
+  void dispose() {
+    pollTimer?.cancel();
+    tickTimer?.cancel();
+    super.dispose();
+  }
 
-  // Loads:
-  //   1) List of all boats (/boats)
-  //   2) All start/finish records for today (/race-starts?race_date=...)
+
+  // Load Data (boats and race-start rows)
+
   Future<void> _loadData() async {
     setState(() {
       loading = true;
@@ -123,25 +102,27 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     });
 
     try {
-      // Step 1: Fetch all boats from backend
       final boatsRes = await dio.get("/boats");
       boats = boatsRes.data as List<dynamic>;
 
-      // Step 2: Fetch timing data for the selected race date
       final startsRes = await dio.get(
         "/race-starts",
         queryParameters: {"race_date": todayDate},
       );
 
-      final startsList = startsRes.data as List<dynamic>;
+      final list = startsRes.data as List<dynamic>;
 
-      // Convert list → Map keyed by boat_id for fast access
       startsByBoatId = {
-        for (final s in startsList)
-          s["boat_id"] as int: Map<String, dynamic>.from(s as Map)
+        for (final s in list) (s["boat_id"] as int): Map<String, dynamic>.from(s as Map)
       };
 
-      setState(() {}); // Refresh UI
+      // Pick a default class to show in the countdown card
+      if (selectedSequenceClass == null && classNames.isNotEmpty) {
+        selectedSequenceClass = classNames.first;
+        _startSequenceTimers();
+      }
+
+      setState(() {});
     } catch (e) {
       setState(() {
         error = "Failed to load data";
@@ -153,266 +134,233 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     }
   }
 
-  // GET UNIQUE CLASS LIST (White Sail 1, White Sail 2, etc.)
 
-  // Extracts a sorted list of unique boat class names
-  // Reference: Dart Set, List, and collection operations [F8]
+  // Class List (derived from boats table)
+
   List<String> get classNames {
     final set = <String>{};
-
     for (final b in boats) {
-      final m = b as Map<String, dynamic>;
+      final m = Map<String, dynamic>.from(b as Map);
       set.add(m["class_name"] as String);
     }
-
-    final list = set.toList()..sort(); // Sort alphabetically
+    final list = set.toList()..sort();
     return list;
   }
 
-  // SET CLASS START TIME (ALL BOATS IN THAT CLASS)
 
-  // Lets race officer define start time for a class:
-  // - Opens a time entry dialog
-  // - Sends POST /race-starts/class-start
+  // Start Time parsing (IMPORTANT)
+
+  // Backend gives start_time as "HH:MM:SS"
+  // We turn it into a DateTime for today and treat it as UTC for comparisons.
+
+  DateTime? _parseStartDateTimeUtc(String? startTimeStr) {
+    if (startTimeStr == null) return null;
+
+    final t = startTimeStr.trim();
+    final iso = "${todayDate}T$t";
+    final dt = DateTime.tryParse(iso);
+    return dt?.toUtc();
+  }
+
+  // Find the scheduled start time for a boat (from race_starts row)
+  DateTime? _scheduledStartUtcForBoat(Map<String, dynamic> boat) {
+    final boatId = boat["id"] as int;
+    final record = startsByBoatId[boatId];
+    final startStr = record?["start_time"] as String?;
+    return _parseStartDateTimeUtc(startStr);
+  }
+
+  // For the UI header: show the scheduled start time per CLASS (all boats share it)
+  String _classStartTimeLabel(String className) {
+    for (final b in boats) {
+      final boat = Map<String, dynamic>.from(b as Map);
+      if (boat["class_name"] == className) {
+        final dt = _scheduledStartUtcForBoat(boat);
+        if (dt == null) return "Start: not set";
+        // show as HH:MM:SS (local display)
+        final local = dt.toLocal();
+        final hh = local.hour.toString().padLeft(2, '0');
+        final mm = local.minute.toString().padLeft(2, '0');
+        final ss = local.second.toString().padLeft(2, '0');
+        return "Start: $hh:$mm:$ss";
+      }
+    }
+    return "Start: not set";
+  }
+
+
+  // Boat State Logic (filtered by time)
+
+
+  // Boat is started only when now - scheduled start time
+  bool _hasStarted(Map<String, dynamic> boat) {
+    final scheduled = _scheduledStartUtcForBoat(boat);
+    if (scheduled == null) return false;
+    return DateTime.now().toUtc().isAfter(scheduled) ||
+        DateTime.now().toUtc().isAtSameMomentAs(scheduled);
+  }
+
+  bool _hasFinished(Map<String, dynamic> boat) {
+    final boatId = boat["id"] as int;
+    final record = startsByBoatId[boatId];
+    return record != null && record["finish_time"] != null;
+  }
+
+  bool _inProgress(Map<String, dynamic> boat) => _hasStarted(boat) && !_hasFinished(boat);
+
+  // Boats grouped by class
+  List<Map<String, dynamic>> _boatsForClass(String className) {
+    return boats
+        .map((b) => Map<String, dynamic>.from(b as Map))
+        .where((b) => b["class_name"] == className)
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _inProgressForClass(String className) =>
+      _boatsForClass(className).where(_inProgress).toList();
+
+  List<Map<String, dynamic>> _finishedForClass(String className) =>
+      _boatsForClass(className).where(_hasFinished).toList();
+
+
+  // Start Sequence Timers
+
+  void _startSequenceTimers() {
+    pollTimer?.cancel();
+    tickTimer?.cancel();
+
+    pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (selectedSequenceClass != null) _loadStartSequence();
+    });
+
+    tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (serverNowUtc != null) {
+        serverNowUtc = serverNowUtc!.add(const Duration(seconds: 1));
+        if (mounted) setState(() {});
+      }
+    });
+
+    _loadStartSequence();
+  }
+
+  Future<void> _loadStartSequence() async {
+    final cls = selectedSequenceClass;
+    if (cls == null) return;
+
+    try {
+      final res = await startSeqApi.getStatus(
+        className: cls,
+        raceDate: todayDate,
+      );
+
+      final dto = StartSequenceStatusDto.fromMap(res);
+
+      setState(() {
+        startSequence = dto;
+        serverNowUtc = dto.serverTimeUtc;
+        startSequenceError = null;
+      });
+    } catch (_) {
+      setState(() {
+        startSequence = null;
+        serverNowUtc = null;
+        startSequenceError = "No start sequence started yet for $cls";
+      });
+    }
+  }
+
+
+  // Admin Actions
+
+
+  Future<void> _fireFiveMinuteGun(String className) async {
+    try {
+      await startSeqApi.start(
+        className: className,
+        raceDate: todayDate,
+        prepFlag: "P",
+      );
+
+      // show the countdown card for that class immediately
+      setState(() => selectedSequenceClass = className);
+      await _loadStartSequence();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("5-minute gun fired for $className")),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to fire 5-minute gun")),
+        );
+      }
+    }
+  }
+
   Future<void> _setClassStart(String className) async {
-    // Default start time = current time rounded to minute
-    // Reference: showDialog for input + Dio POST [F7][D1]
     final now = DateTime.now();
     final defaultTime =
         "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:00";
 
     final controller = TextEditingController(text: defaultTime);
 
-    // Confirmation dialog
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: Text("Set start for $className"),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            labelText: "Start time (HH:MM:SS)",
-          ),
+          decoration: const InputDecoration(labelText: "Start time (HH:MM:SS)"),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Set"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Set")),
         ],
       ),
     );
 
-    // Cancelled dialog
     if (ok != true) return;
 
     try {
-      // Convert HH:MM:SS into the ISO-style time format your FastAPI endpoint expects
-      // Example: "18:30:00" -"18:30:00.000Z"
-      final startTimeIso = "${controller.text.trim()}.000Z";
-
-      // POST request to backend
       await dio.post("/race-starts/class-start", data: {
         "class_name": className,
         "race_date": todayDate,
-        "start_time": startTimeIso,
+        "start_time": "${controller.text.trim()}.000Z",
       });
 
-      // Reload data after modification
       await _loadData();
 
-      // Success feedback (show what the user typed, not the ISO string)
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Start for $className set to ${controller.text.trim()}",
-            ),
-          ),
+          SnackBar(content: Text("Start for $className set to ${controller.text.trim()}")),
         );
       }
-    } catch (e) {
-      // Error feedback
-      if (context.mounted) {
+    } catch (_) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to set start for $className"),
-          ),
+          SnackBar(content: Text("Failed to set start for $className")),
         );
       }
     }
   }
 
-  // RECORD INDIVIDUAL BOAT FINISH TIME
-
-  // Records the exact moment a boat crosses the finish line
-  // Reference: capturing current time, string formatting, HTTP POST [F8][D1]
-
-
-  // FINISH A BOAT (with OCS and Penalty options)
-
-
-  // This replaces the old _finishBoat() method.
-  // When the race officer taps "Finish now", shows a bottom sheet that allows:
-  //  - marking the boat as OCS
-  //  - entering a penalty in seconds
-  // Then we post to /race-finish with finish_time + options.
-  Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
-    final boatId = boat["id"] as int;
-
-    // Look up this boat's timing record for today
-    final startRecord = startsByBoatId[boatId];
-
-    // Safety check: must have a start time before you can finish
-    if (startRecord == null || startRecord["start_time"] == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("No start time recorded yet for ${boat['sail_no']}."),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Local values controlled by the bottom sheet UI
-    bool ocs = false;
-
-    // Text controller for penalty seconds input
-    final penaltyController = TextEditingController(text: "0");
-
-    // Show a bottom sheet (clean UI) to capture finish options
-    // Reference: showModalBottomSheet for collecting user input in a modal sheet [F9]
-    // Reference: StatefulBuilder for local state inside modal widgets [F10]
-
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-
-      // Allows the sheet to move up when keyboard opens
-      isScrollControlled: true,
-
-      // Rounded top corners for a nicer look
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-
-      builder: (context) {
-        return Padding(
-          // Add padding and account for keyboard so fields aren’t hidden
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            // Shrinks to fit content
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Sheet heading
-              Text(
-                "Finish options",
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-
-              // Uses StatefulBuilder so the switch can update inside the sheet
-              // Reference: SwitchListTile widget for boolean toggles (OCS on/off) [F11]
-
-              StatefulBuilder(
-                builder: (context, setModalState) {
-                  return SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("Mark as OCS"),
-                    value: ocs,
-                    onChanged: (v) => setModalState(() => ocs = v),
-                  );
-                },
-              ),
-
-              // Penalty entry (seconds)
-              // Reference: TextField numeric input and keyboardtype for number entry [F12]
-              TextField(
-                controller: penaltyController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Penalty (seconds)",
-                  hintText: "0",
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Action buttons
-              // Reference: OutlinedButton/ElevatedButton for actions (Cancel/Confirm) [F13]
-              Row(
-                children: [
-                  // Cancel button
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text("Cancel"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Confirm button
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text("Record finish"),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    // If they cancel the sheet, do nothing
-    if (confirmed != true) return;
-
-    // Convert penalty input to int safely
-    final penaltySeconds = int.tryParse(penaltyController.text.trim()) ?? 0;
-
-    // Capture the exact finish time "now"
+  Future<void> _finishBoat(Map<String, dynamic> boat) async {
     final now = DateTime.now();
     final finishTime =
         "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
 
     try {
-      // POST finish and options to backend
       await dio.post("/race-finish", data: {
-        "boat_id": boatId,
+        "boat_id": boat["id"],
         "race_date": todayDate,
         "finish_time": finishTime,
-
-        // Extra fields for penalties/OCS
-        "ocs": ocs,
-        "penalty_seconds": penaltySeconds,
       });
 
-      // Reload the boats and timings so UI updates
       await _loadData();
-
-      // Show success message
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Finish recorded for ${boat['sail_no']} at $finishTime"),
-          ),
-        );
-      }
-    } catch (e) {
-      // Show error message
-      if (context.mounted) {
+    } catch (_) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Failed to record finish")),
         );
@@ -420,248 +368,373 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     }
   }
 
-  // RESET TODAY’S TIMINGS (ALL OR PER CLASS)
 
-  // DELETE all timing data for a class OR all classes for today's race
-  // Reference: RESTful DELETE with query parameters using Dio [D1]
-  Future<void> _resetToday({String? className}) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Reset today's timings"),
-        content: Text(
-          className == null
-              ? "This will clear ALL start/finish times for today. Are you sure?"
-              : "This will clear ALL start/finish times for $className today. Are you sure?",
+  // Countdown UI helpers
+
+  String _formatCountdown(Duration d) {
+    final s = d.inSeconds < 0 ? 0 : d.inSeconds;
+    final m = s ~/ 60;
+    final ss = s % 60;
+    return "${m.toString().padLeft(2, '0')}:${ss.toString().padLeft(2, '0')}";
+  }
+
+  Widget _buildStartSequenceCard() {
+    if (selectedSequenceClass == null) return const SizedBox.shrink();
+
+    if (startSequence == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(startSequenceError ?? "No start sequence running."),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Reset"),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    try {
-      await dio.delete(
-        "/race-day",
-        queryParameters: {
-          "race_date": todayDate,
-          if (className != null) "class_name": className,
-        },
       );
-
-      await _loadData();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              className == null
-                  ? "Cleared all timings for today"
-                  : "Cleared all timings for $className today",
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to reset timings")),
-        );
-      }
     }
-  }
 
-  // FORMAT SECONDS - HH:MM:SS (used for elapsed time)
+    final s = startSequence!;
+    final nowUtc = serverNowUtc ?? s.serverTimeUtc;
 
-  String _formatDuration(int? seconds) {
-    // Reference: Dart Duration to HH:MM:SS formatting [F8]
-    if (seconds == null) return "—";
+    final startMomentUtc = s.sequenceStartUtc.add(const Duration(minutes: 5));
+    final timeToStart = startMomentUtc.difference(nowUtc);
 
-    final d = Duration(seconds: seconds);
-
-    String two(int n) => n.toString().padLeft(2, '0');
-
-    final h = two(d.inHours);
-    final m = two(d.inMinutes.remainder(60));
-    final s = two(d.inSeconds.remainder(60));
-
-    return "$h:$m:$s";
-  }
-
-  // BUILD UI
-  // Reference: Wrap layout widget & buttons for class controls [F1]
-  // Reference: ListView.builder showing per-boat timing info [F5]
-  // Reference: Flutter Card & Material layout widgets [F19]
-  // Reference: Flutter Column & alignment for vertical layout [F20]
-
-
-  // UI HELPER: Build a boat card in a consistent clean style
-
-  Widget _buildBoatCard(
-    Map<String, dynamic> boat, {
-    required bool showFinishButton,
-  }) {
-    // Get the timing record for this boat for today (if any)
-    final startRecord = startsByBoatId[boat["id"]];
-
-    // Extract timing values safely
-    final startTime =
-        startRecord != null ? startRecord["start_time"] as String? : null;
-    final finishTime =
-        startRecord != null ? startRecord["finish_time"] as String? : null;
-    final elapsedSeconds =
-        startRecord != null ? startRecord["elapsed_seconds"] as int? : null;
+    final showPrepFlag = timeToStart > const Duration(minutes: 1);
 
     return Card(
-      // Reference: Card widget for grouping related content visually [F19]
-      // Rounded corners for a cleaner look
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        // Boat label
-        // Reference: ListTile widget for standard list row layout [F5]
-
-        title: Text("${boat['sail_no']} – ${boat['name']}"),
-
-        // Timing details
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            Text("Class: ${boat['class_name']}"),
-            Text("Start: ${startTime ?? '—'}"),
-            Text("Finish: ${finishTime ?? '—'}"),
-            Text("Elapsed: ${_formatDuration(elapsedSeconds)}"),
+            Text(
+              "Start Sequence — ${s.className}",
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            if (showPrepFlag)
+              FlagChip(flagCode: s.prepFlag, label: "Preparatory: ${s.prepFlag} (UP)")
+            else
+              const Text("Preparatory flag DOWN (1 minute)"),
+            const SizedBox(height: 14),
+            Text(
+              _formatCountdown(timeToStart),
+              style: const TextStyle(fontSize: 44, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
+      ),
+    );
+  }
 
-        // Right side of the tile:
-        // - If boat is in progress - show Finish button
-        // - If boat is finished - show a simple check icon
-        trailing: showFinishButton
-                // Reference: Conditional UI rendering using Dart collection-if [F15]
-                // Reference: ElevatedButton for primary actions, Icon for status display [F13][F21]
+// Finish a boat (with OCS and Penalty options)
 
+// What this does:
+// 1) Checks the boat has a start_time in today's race_starts row (startsByBoatId)
+// 2) Pops up a bottom sheet where the Race Officer can:
+//    - mark OCS (true/false)
+//    - enter penalty seconds (number)
+// 3) If confirmed, posts to FastAPI POST /race-finish with:
+//    boat_id, race_date, finish_time, ocs, penalty_seconds
+// 4) Reloads /boats and /race-starts so the UI updates instantly
+Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
+  final boatId = boat["id"] as int;
+
+  // Look up today's timing record for this boat (from /race-starts)
+  final startRecord = startsByBoatId[boatId];
+
+  // Safety check: must have a start time before you can finish
+  if (startRecord == null || startRecord["start_time"] == null) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("No start time recorded yet for ${boat['sail_no']}.")),
+    );
+    return;
+  }
+
+  // Local values controlled by the bottom sheet UI
+  bool ocs = false;
+  final penaltyController = TextEditingController(text: "0");
+
+  // Bottom sheet to capture options
+  final confirmed = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (context) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Finish options", style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+
+            // OCS toggle
+            StatefulBuilder(
+              builder: (context, setModalState) {
+                return SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Mark as OCS"),
+                  value: ocs,
+                  onChanged: (v) => setModalState(() => ocs = v),
+                );
+              },
+            ),
+
+            // Penalty seconds input
+            TextField(
+              controller: penaltyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: "Penalty (seconds)",
+                hintText: "0",
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Cancel / Confirm
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text("Cancel"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text("Record finish"),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  if (confirmed != true) return;
+
+  // Parse penalty safely
+  final penaltySeconds = int.tryParse(penaltyController.text.trim()) ?? 0;
+
+  // Capture finish time as "HH:MM:SS"
+  final now = DateTime.now();
+  final finishTime =
+      "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+
+  try {
+    // POST to backend: this updates the race_starts row in MySQL for this boat/date
+    await dio.post("/race-finish", data: {
+      "boat_id": boatId,
+      "race_date": todayDate,
+      "finish_time": finishTime,
+      "ocs": ocs,
+      "penalty_seconds": penaltySeconds,
+    });
+
+    // Reload to refresh lists and times
+    await _loadData();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Finish recorded for ${boat['sail_no']} at $finishTime")),
+    );
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Failed to record finish")),
+    );
+  }
+}
+
+
+  // Boat Card
+
+  Widget _boatTile(Map<String, dynamic> boat, {required bool showFinish}) {
+    final boatId = boat["id"] as int;
+    final record = startsByBoatId[boatId];
+
+    final startStr = record?["start_time"] as String?;
+    final finishStr = record?["finish_time"] as String?;
+
+    return Card(
+      child: ListTile(
+        title: Text("${boat["sail_no"]} — ${boat["name"]}"),
+        subtitle: Text("Start: ${startStr ?? "—"}   Finish: ${finishStr ?? "—"}"),
+        trailing: showFinish
             ? ElevatedButton(
-                // Open the "Finish options" sheet so the RO can mark OCS / penalty
                 onPressed: () => _finishBoatWithOptions(boat),
-                child: const Text("Finish now"),
+                child: const Text("Finish"),
               )
             : const Icon(Icons.check_circle_outline),
       ),
     );
   }
 
+
+  // UI
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Title includes today's date to avoid confusion
       appBar: AppBar(
-        title: Text("Start & Finish – $todayDate"),
+        title: Text("Race Officer — $todayDate"),
+        actions: [
+          // Refresh button
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: "Refresh",
+          ),
+        ],
       ),
-
-      // Page padding
-      body: Padding(
-        padding: const EdgeInsets.all(12),
-        child: loading
-            ? const Center(child: CircularProgressIndicator())
-            : error != null
-                ? Center(child: Text(error!))
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : error != null
+              ? Center(child: Text(error!))
+              : RefreshIndicator(
+                  // Pull-to-refresh too
+                  onRefresh: _loadData,
+                  child: ListView(
+                    padding: const EdgeInsets.all(12),
                     children: [
-                      // Reset timings for entire day
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: () => _resetToday(),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text("Reset today's timings"),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Section title
-                      Text(
-                        "Set class start times",
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Buttons for each class
+                      // Class button (Set Start and 5-min)
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
                           for (final className in classNames)
-                            ElevatedButton(
-                              onPressed: () => _setClassStart(className),
-                              child: Text(className),
-                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _setClassStart(className),
+                                  child: Text(className),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: () => _fireFiveMinuteGun(className),
+                                  child: const Text("5-min"),
+                                ),
+                              ],
+                            )
                         ],
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
 
-                      // Boat list split into two clean sections:
-                      // 1) In progress (only boats that started and have NOT finished)
-                      // 2) Finished (boats that have finished)
-                      // Reference: ListView for scrollable lists of widgets [F5]
+                      // Start Sequence Countdown Card
+                      _buildStartSequenceCard(),
 
-                      Expanded(
-                        child: ListView(
+                      const SizedBox(height: 14),
+
+                      // Boats Grouped by class
+                      for (final className in classNames) ...[
+                        ExpansionTile(
+                          title: Text(
+                            className,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text(_classStartTimeLabel(className)),
+                          childrenPadding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                           children: [
-                            Text(
-                              "In progress",
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
                             const SizedBox(height: 8),
+                            const Text("In progress", style: TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 6),
 
-                            // If there are no boats in progress, show a helpful message
-                            if (inProgressBoats.isEmpty)
+                            if (_inProgressForClass(className).isEmpty)
                               const Text("No boats currently in progress.")
                             else
-                              // Build a card for each boat that is in progress
-                              ...inProgressBoats.map(
-                                (boat) => _buildBoatCard(
-                                  boat,
-                                  showFinishButton: true,
-                                ),
+                              ..._inProgressForClass(className).map(
+                                (b) => _boatTile(b, showFinish: true),
                               ),
 
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
+                            const Text("Finished", style: TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 6),
 
-                            Text(
-                              "Finished",
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-
-                            // If no boats are finished, show a message
-                            if (finishedBoats.isEmpty)
+                            if (_finishedForClass(className).isEmpty)
                               const Text("No boats finished yet.")
                             else
-                              // Build a card for each finished boat (no finish button)
-                              ...finishedBoats.map(
-                                (boat) => _buildBoatCard(
-                                  boat,
-                                  showFinishButton: false,
-                                ),
+                              ..._finishedForClass(className).map(
+                                (b) => _boatTile(b, showFinish: false),
                               ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                      ],
                     ],
                   ),
-      ),
+                ),
     );
   }
 }
+
+
+// Dto Class(dot notation in UI)
+
+class StartSequenceStatusDto {
+  final String className;
+  final String raceDate;
+  final String prepFlag;
+  final DateTime sequenceStartUtc;
+  final DateTime serverTimeUtc;
+  final String status;
+
+  StartSequenceStatusDto({
+    required this.className,
+    required this.raceDate,
+    required this.prepFlag,
+    required this.sequenceStartUtc,
+    required this.serverTimeUtc,
+    required this.status,
+  });
+
+  factory StartSequenceStatusDto.fromMap(Map<String, dynamic> m) {
+    return StartSequenceStatusDto(
+      className: m["class_name"] as String,
+      raceDate: m["race_date"] as String,
+      prepFlag: m["prep_flag"] as String,
+      sequenceStartUtc: DateTime.parse(m["sequence_start_utc"] as String),
+      serverTimeUtc: DateTime.parse(m["server_time_utc"] as String),
+      status: (m["status"] ?? "RUNNING") as String,
+    );
+  }
+}
+
+// Summary
+// The race officer control panel that:
+// 1. Manages start times at class level
+// 2. Shows live countdown synchronized with backend
+// 3. Groups boats by state (in progress / finished)
+// 4. Records finishes with OCS/penalty options
+// 5. Provides both manual refresh and pull-to-refresh
+
+// This is the heart of the race timing system.
+
+// Reference: StatefulWidget for complex state management [F14]
+// Reference: Timer.periodic for countdown synchronization [F23]
+// Reference: Duration and DateTime calculations [F8]
+// Reference: UTC timezone handling [B10]
+// Reference: ExpansionTile for class grouping [F26]
+// Reference: RefreshIndicator for pull-to-refresh [F27]
+// Reference: showModalBottomSheet for finish options [F9]
+// Reference: StatefulBuilder for bottom sheet state [F10]
+// Reference: SwitchListTile for OCS toggle [F11]
+// Reference: TextField for penalty input [F4]
+// Reference: ElevatedButton and OutlinedButton [F1]
+// Reference: Dio GET/POST methods [D1][D3]
+// Reference: FastAPI timing endpoints [B1]
+// Reference: Query parameters for date filtering [B11]
+// Reference: SnackBar for feedback [F7]
+// Reference: Card for countdown display [F19]

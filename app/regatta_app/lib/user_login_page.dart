@@ -1,63 +1,47 @@
-// This screen is used by sailors (boat owners) to log into the app.
-// They login by entering:
-//   Sail Number
-//   Password
+// This page lets competitors (boat owners) log in using their sail number and password. 
+// After successful login, the backend returns the boat object and the app navigates to UserBoatPage where they can view:
+// Today's race course
+// Their class results
+// Their own boat highlighted
 
-// When the login is successful, the backend returns the boat object associated with the given sail number. The app then navigates to
-// UserBoatPage so the competitor can see:
-//   Today's course
-//   Today's results for their class
-//   Their own boat highlighted in the results table
+// Key Difference from Admin Login
+// Admin login uses username/password and navigates to fleet management.
+// User login uses sail_no/password and navigates to personal dashboard.
 
-// This screen communicates with the backend using:
-// POST /user-login
-
-// Expected backend responses:
-//   SUCCESS - { "success": true, "boat": {...} }
-//   FAILURE -{ "success": false, "message": "Invalid password" }
-
-// This page contains:
-// - Two input fields (sail_no and password)
-// - A login button
-// - Error messages
-// - A loading spinner
+// Backend endpoint: POST /user-login
+// Response: { "success": true, "boat": {...} } or { "success": false, "message": "..." }
 
 
 import 'package:flutter/material.dart'; // Flutter UI components
 import 'package:dio/dio.dart';  // HTTP client for backend requests 
-import 'package:regatta_app/theme/app_theme.dart';
+import 'package:regatta_app/theme/app_theme.dart'; // Dark Theme
 // Reference: Dio for HTTP requests [D1], login form similar pattern as admin login [F4]
 import 'user_boat_page.dart';   // Next screen after successful login
 
-// A stateful widget because:
-//  - it handles text input,
-//  - performs HTTP requests,
-//  - displays loading indicators and error messages
+
 class UserLoginPage extends StatefulWidget {
+  // stateful because of text input and API calls
   const UserLoginPage({super.key});
 
   @override
   State<UserLoginPage> createState() => _UserLoginPageState();
 }
 
-// The state class holds all dynamic data (text fields, loading state, errors)
 class _UserLoginPageState extends State<UserLoginPage> {
-  // HTTP client configured to communicate with your FastAPI backend
+  // The state class holds all dynamic data (text fields, loading state, errors)
   final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  // HTTP client configured to communicate with my FastAPI backend
 
   // Text controllers to read input text from the two fields
   final sailController = TextEditingController(); // Sail Number input
   final passController = TextEditingController(); // Password input
 
-  // Error message shown under the AppBar if login fails
-  String? error;
+  String? error;// Error message shown under the AppBar if login fails
 
-  // Loading flag used to display a spinner instead of Login button
-  bool loading = false;
+  bool loading = false; // Loading flag used to display a spinner instead of Login button
+ 
 
-
-  // ATTEMPT LOGIN
-
+  // Attempt Login
 
   // Handles user login logic
 
@@ -84,6 +68,8 @@ class _UserLoginPageState extends State<UserLoginPage> {
         "sail_no": sailController.text.trim(),
         "password": passController.text.trim(),
       });
+      // Sends sail number and password to backend. 
+      // Note the field is "sail_no" (snake_case) to match backend Pydantic model.
 
       // Backend signals success using success = true
       if (res.data["success"] == true) {
@@ -95,6 +81,8 @@ class _UserLoginPageState extends State<UserLoginPage> {
               // Pass the boat object into the next screen
               builder: (_) => UserBoatPage(boat: res.data["boat"]),
             ),
+            // Key difference: Passes boat data to UserBoatPage constructor.
+            // This is the boat object from backend containing sail_no, name, class_name, rating_value, etc.
           );
         }
 
@@ -113,7 +101,7 @@ class _UserLoginPageState extends State<UserLoginPage> {
   }
 
 
-  // BUILD UI
+  // Build Method (UI) 
 
 
   @override
@@ -131,25 +119,25 @@ class _UserLoginPageState extends State<UserLoginPage> {
         child: Column(
           children: [
 
-            // ERROR MESSAGE 
+            // Error Message
             if (error != null)
               Text(
                 error!,
                 style: const TextStyle(color: AppTheme.danger),
               ),
 
-            //  SAIL NUMBER INPUT 
+            // Sail Number Input 
             TextField(
               controller: sailController,
               decoration: const InputDecoration(
-                labelText: "Sail Number", // User sees this text label
+                labelText: "Sail Number",  // User sees this text label
                 border: OutlineInputBorder(),  // Adds visible textfield border
               ),
             ),
 
             const SizedBox(height: 16),
 
-            //  PASSWORD INPUT 
+            // Password input
             TextField(
               controller: passController,
               obscureText: true,  // Hide password characters
@@ -161,14 +149,14 @@ class _UserLoginPageState extends State<UserLoginPage> {
 
             const SizedBox(height: 20),
 
-            //  LOGIN BUTTON OR LOADING SPINNER 
+            //  Login button or leading spinner
             loading
                 // Show spinner while login is in progress
                 ? const CircularProgressIndicator()
                 // Otherwise show the login button
                 : ElevatedButton(
-                    onPressed: _login,            // Run login function
-                    child: const Text("Login"),   // Button label
+                    onPressed: _login,  // Run login function
+                    child: const Text("Login"),  // Button label
                   ),
           ],
         ),
@@ -176,3 +164,19 @@ class _UserLoginPageState extends State<UserLoginPage> {
     );
   }
 }
+
+// Summary 
+// Very similar to admin login, but:
+// Uses sail_no instead of username
+// Calls POST /user-login
+// Receives boat object in response
+// Navigates to UserBoatPage(boat: ...)
+// No form validation (simplified)
+
+// Reference: StatefulWidget for form state [F14]
+// Reference: TextField for input fields [F4]
+// Reference: Dio POST request for authentication [D1][D3]
+// Reference: Navigator.pushReplacement with data passing [F28]
+// Reference: CircularProgressIndicator for loading state [F1]
+// Reference: SnackBar for error feedback [F7]
+// Reference: FastAPI user authentication endpoint [B1]
