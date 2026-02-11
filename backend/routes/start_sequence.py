@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 # Imports datetime tools: datetime for timestamps, timezone for UTC.
 
-from backend.db import get_db
+from db import get_db
 # Imports the get_db function that provides database sessions via dependency injection.
 
 from backend.models import StartSequence
