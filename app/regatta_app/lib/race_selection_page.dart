@@ -34,7 +34,8 @@ class RaceSelectionPage extends StatefulWidget {
 class _RaceSelectionPageState extends State<RaceSelectionPage> {
   // HTTP client with base URL pointing to your FastAPI backend
   // All calls like dio.get("/courses") -  http://127.0.0.1:8000/courses
-  final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  // now with Railway it is: "https://web-production-9fd2e3.up.railway.app"
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
 
   // List of course objects returned from backend
   // Each element is a Map with fields like id, name, wind, description, rounds

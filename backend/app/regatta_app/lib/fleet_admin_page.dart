@@ -42,7 +42,7 @@ class _FleetAdminPageState extends State<FleetAdminPage> {
   // Dio HTTP client configured to talk to the backend
   // BaseOptions(baseUrl: 'http://127.0.0.1:8000') means
   // all requests like dio.get('/boats') will go to http://127.0.0.1:8000/boats
-  final dio = Dio(BaseOptions(baseUrl: 'http://127.0.0.1:8000'));
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
 
   // Controller for the search text field at the top of the page.
   // It lets me read the current search string and also react to changes.

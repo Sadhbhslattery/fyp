@@ -26,7 +26,7 @@ class _LoginPageState extends State<LoginPage> {
 
   // Backend Client Setup
 
-  final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
   // Creates HTTP client pointing to localhost:8000. All requests will be prefixed with this base URL.
 
 

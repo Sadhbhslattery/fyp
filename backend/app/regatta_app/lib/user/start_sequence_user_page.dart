@@ -32,7 +32,7 @@ class StartSequenceUserPage extends StatefulWidget {
 
 class _StartSequenceUserPageState extends State<StartSequenceUserPage> {
   // Use local FastAPI backend for simulator testing
-  final api = StartSequenceApi('http://127.0.0.1:8000');
+  final api = StartSequenceApi("https://web-production-9fd2e3.up.railway.app");
 
   // Map returned by StartSequenceApi.getStatus()
   Map<String, dynamic>? status;  // Latest response from backend (null until first successful fetch)

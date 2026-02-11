@@ -44,11 +44,11 @@ class UserBoatPage extends StatefulWidget {
 
 class _UserBoatPageState extends State<UserBoatPage> {
   // HTTP client pointing at our local FastAPI backend (same as other pages)
-  final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
 
   // API client used to fetch the start-sequence broadcast
   // (Uses the same FastAPI base URL)
-  final StartSequenceApi startSeqApi = StartSequenceApi("http://127.0.0.1:8000");
+  final StartSequenceApi startSeqApi = StartSequenceApi("https://web-production-9fd2e3.up.railway.app");
 
   // Holds the currently selected course for today, as returned by GET /current-course.
 

@@ -19,7 +19,7 @@ class StartSequenceAdminPage extends StatefulWidget {
 class _StartSequenceAdminPageState extends State<StartSequenceAdminPage> {
   // The underscore prefix makes this class private to this file. 
   // This State class will hold all the form data, API client and UI state.
-  final api = StartSequenceApi('http://127.0.0.1:8000');
+  final api = StartSequenceApi("https://web-production-9fd2e3.up.railway.app");
   // Creates an instance of StartSequenceApi pointing to localhost:8000. This is the HTTP client that will talk to your FastAPI backend.
   // For production, I'll change this to the Railway deployment URL (e.g., 'https://your-app.railway.app').
 

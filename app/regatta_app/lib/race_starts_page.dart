@@ -45,7 +45,7 @@ import 'package:dio/dio.dart';
 import 'services/start_sequence_api.dart';
 
 
-final StartSequenceApi startSeqApi = StartSequenceApi('http://127.0.0.1:8000');
+final StartSequenceApi startSeqApi = StartSequenceApi("https://web-production-9fd2e3.up.railway.app");
 
 class RaceStartsPage extends StatefulWidget {
   const RaceStartsPage({super.key});
@@ -55,7 +55,7 @@ class RaceStartsPage extends StatefulWidget {
 }
 
 class _RaceStartsPageState extends State<RaceStartsPage> {
-  final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
 
   List<dynamic> boats = [];
   Map<int, Map<String, dynamic>> startsByBoatId = {};

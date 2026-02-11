@@ -58,7 +58,7 @@ class RaceResultsPage extends StatefulWidget {
 /// State class that contains all logic for fetching and displaying results
 class _RaceResultsPageState extends State<RaceResultsPage> {
   // Dio client for backend API communication
-  final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
 
   // Today's date formatted as YYYY-MM-DD (backend uses this format)
   late String todayDate;

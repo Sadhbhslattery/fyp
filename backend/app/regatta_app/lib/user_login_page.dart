@@ -29,7 +29,7 @@ class UserLoginPage extends StatefulWidget {
 
 class _UserLoginPageState extends State<UserLoginPage> {
   // The state class holds all dynamic data (text fields, loading state, errors)
-  final dio = Dio(BaseOptions(baseUrl: "http://127.0.0.1:8000"));
+  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
   // HTTP client configured to communicate with my FastAPI backend
 
   // Text controllers to read input text from the two fields
