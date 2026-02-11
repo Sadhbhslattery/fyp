@@ -25,7 +25,6 @@ import 'package:regatta_app/theme/app_theme.dart'; // HTTP client for calling th
 //  GET /start-sequence/status?class_name=...&race_date=...
 import 'dart:async'; // Timer.periodic for live countdown updates
 import 'services/start_sequence_api.dart';
-import 'ui/flags/flag_chip.dart';
 
 // UserBoatPage is a stateful widget because:
 // it loads data asynchronously from the backend and the course/results can change over time
@@ -506,24 +505,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
 
             const SizedBox(height: 12),
 
-            // Show flag chip while it is "UP" (from 5 minutes until 1 minute)
-            if (showPrepFlag)
-              Center(
-                child: FlagChip(
-                  flagCode: prepFlag,
-                  label: "Preparatory: $prepFlag (UP)",
-                ),
-              )
-            else
-              Center(
-                child: Text(
-                  "Preparatory flag DOWN (1 minute)",
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
+            
             // Large countdown MM:SS
             Center(
               child: Text(

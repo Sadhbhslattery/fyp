@@ -43,7 +43,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
 import 'services/start_sequence_api.dart';
-import 'ui/flags/flag_chip.dart';
+
 
 final StartSequenceApi startSeqApi = StartSequenceApi('http://127.0.0.1:8000');
 
@@ -64,6 +64,7 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   String? error;
 
   late String todayDate;
+
 
 
   // Start Sequence 
@@ -396,8 +397,6 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     final startMomentUtc = s.sequenceStartUtc.add(const Duration(minutes: 5));
     final timeToStart = startMomentUtc.difference(nowUtc);
 
-    final showPrepFlag = timeToStart > const Duration(minutes: 1);
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -405,17 +404,18 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
           children: [
             Text(
               "Start Sequence — ${s.className}",
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: 12),
-            if (showPrepFlag)
-              FlagChip(flagCode: s.prepFlag, label: "Preparatory: ${s.prepFlag} (UP)")
-            else
-              const Text("Preparatory flag DOWN (1 minute)"),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Text(
               _formatCountdown(timeToStart),
-              style: const TextStyle(fontSize: 44, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 44,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),

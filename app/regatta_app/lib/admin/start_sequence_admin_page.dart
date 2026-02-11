@@ -5,7 +5,7 @@
 
 import 'package:flutter/material.dart'; //  Core Flutter widgets (Scaffold, AppBar, Button, Text, etc.)
 import '../services/start_sequence_api.dart'; // The HTTP service
-import '../ui/flags/flag_chip.dart'; // A custom widget that displays racing flags with proper colors (Not currenlty working)
+
 
 class StartSequenceAdminPage extends StatefulWidget {
   const StartSequenceAdminPage({super.key});
@@ -140,11 +140,6 @@ class _StartSequenceAdminPageState extends State<StartSequenceAdminPage> {
 
               if (latest != null) ...[
                 const SizedBox(height: 18),
-
-                FlagChip(
-                  flagCode: latest?["prep_flag"],
-                  label: 'Broadcast flag: ${latest?["prep_flag"]}',
-                ),
 
                 const SizedBox(height: 10),
 

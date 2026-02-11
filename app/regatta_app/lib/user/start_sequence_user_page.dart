@@ -9,7 +9,6 @@
 import 'dart:async';  // Provides Timer class for periodic operations
 import 'package:flutter/material.dart'; // Core Flutter widgets
 import '../services/start_sequence_api.dart';  // HTTP service for backend communication
-import '../ui/flags/flag_chip.dart';  // Custom flag display widget
 
 class StartSequenceUserPage extends StatefulWidget {
   final String className;
@@ -166,9 +165,16 @@ class _StartSequenceUserPageState extends State<StartSequenceUserPage> {
         const SizedBox(height: 14),
 
         if (showPrepFlag)
-          FlagChip(flagCode: prepFlag, label: 'Preparatory: $prepFlag (UP)')
-        else
-          const Text('Preparatory flag DOWN (1 minute)', textAlign: TextAlign.center),
+          Center(
+            child: Chip(
+              label: Text('Preparatory Flag Up'),
+              ),
+              )
+        else 
+          const Text(
+            'Preparatory flag DOWN (1 minute)',
+            textAlign: TextAlign.center,
+            ),
 
         const SizedBox(height: 18),
 
