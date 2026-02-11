@@ -46,10 +46,14 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 #   remote RDS
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+# Get database URL from Railway (deployed)
 # os.getenv is a function that retrieves an environment variable by name. 
 # It's like looking up a value in a dictionary. 
 # This line above reads the DATABASE_URL variable that was loaded by load_dotenv().
 
+# If running locally, fallback to your local MySQL
+if not DATABASE_URL:
+    DATABASE_URL = "mysql+pymysql://root:Daisy1234@localhost:3306/regatta"
 
 # This is a safety check. If DATABASE_URL is missing, raise a clear error message immediately.
 # Without this, SQLAlchemy create_engine may fail in a confusing way and prevent
