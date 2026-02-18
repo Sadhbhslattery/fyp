@@ -58,19 +58,19 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 # Session: type hint for DB session objects coming from SessionLocal
 
-from backend.db import Base, engine, SessionLocal
+from db import Base, engine, SessionLocal
 # Base: For creating tables
 # engine: Database engine (MySQL connection) configured in db.py
 # SessionLocal: factory for DB sessions (session per request pattern)
 
-from backend.models.base import Race, Event, Boat, RaceStart, RaceDaySettings
+from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
 # Imports the ORM models defined in models.py. These are used to query and modify database tables.
 # Race: race table (not heavily used in this iteration)
 # Event: placeholder / future use
 # Boat: each competitor boat (sail_no, class_name, rating_value, etc.)
 # RaceStart: per boat, per day start/finish and timing info
 
-from backend.routes.start_sequence import router as start_sequence_router
+from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
 

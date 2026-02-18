@@ -12,11 +12,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 # Imports datetime tools: datetime for timestamps, timezone for UTC.
 
-from backend.db import get_db
+from db import get_db
 # Imports the get_db function that provides database sessions via dependency injection.
 
-from backend.models.start_sequence import StartSequence
-from backend.schemas.start_sequence import StartSequenceCreate, StartSequenceStatus
+from models.start_sequence import StartSequence
+from schemas.start_sequence import StartSequenceCreate, StartSequenceStatus
 # Imports the StartSequence ORM model representing the start_sequences table.
 
 router = APIRouter(
