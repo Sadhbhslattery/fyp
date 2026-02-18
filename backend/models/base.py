@@ -33,7 +33,7 @@ from sqlalchemy.orm import relationship
 
 # Imports the Base class that was created in db.py. 
 # All model classes will inherit from this
-from db import Base
+from backend.db import Base
 
 
 #  Race Table
@@ -263,7 +263,7 @@ class StartSequence(Base):
     sequence_start_utc = Column(DateTime, nullable=False)
     status = Column(String(20), nullable=False) # Current status (e.g., 'STARTED' after gun).
 
-# Summary of models.py
+# Summary of base.py
 #models.py defines 7 tables:
 
 # 1. Race: Basic race information (name, start time, status)
