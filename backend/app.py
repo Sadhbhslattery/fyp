@@ -70,7 +70,7 @@ from models import Race, Event, Boat, RaceStart, RaceDaySettings
 # Boat: each competitor boat (sail_no, class_name, rating_value, etc.)
 # RaceStart: per boat, per day start/finish and timing info
 
-from routes.start_sequence import router as start_sequence_router
+from backend.routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
 
