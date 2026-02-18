@@ -73,6 +73,9 @@ from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
 from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
+from schemas.auth import SignupRequest, LoginRequest, TokenResponse
+from auth import hash_password, verify_password, create_access_token
+# REFERENCE
 
 # Application Setup
 
@@ -185,7 +188,28 @@ class LoginResponse(BaseModel):
 # Reference: SQLAlchemy ORM Models Tutorial (for how we might later store users)
 # Reference: FastAPI request body models and response_model [B1][B3]
 
-@app.post("/login", response_model=LoginResponse)
+
+# signup is new 
+@app.post("/signup")
+def signup(payload: SignupRequest, db: Session = Depends(get_db)):
+    boat = db.query(Boat).filter(Boat.sail_no == payload.sail_no).first()
+    if not boat:
+        raise HTTPException(status_code=404, detail="Boat not found")
+
+    if boat.owner_password:
+        raise HTTPException(status_code=400, detail="Account already exists")
+
+    boat.owner_password = hash_password(payload.password)
+    if payload.owner_name:
+        boat.owner_name = payload.owner_name
+
+    db.commit()
+    return {"message": "Account created"}
+
+
+# REFERENCE ABOVE
+
+@app.post("/admin-login", response_model=LoginResponse)
 def login(body: LoginRequest):
     """
     Simple hard-coded admin login.
@@ -200,6 +224,18 @@ def login(body: LoginRequest):
     else:
         return LoginResponse(success=False, message="Invalid credentials")
 
+@app.post("/login", response_model=TokenResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    boat = db.query(Boat).filter(Boat.sail_no == payload.sail_no).first()
+    if not boat or not boat.owner_password:
+        raise HTTPException(status_code=401, detail="Invalid login")
+
+    if not verify_password(payload.password, boat.owner_password):
+        raise HTTPException(status_code=401, detail="Invalid login")
+
+    token = create_access_token({"sub": boat.sail_no, "boat_id": boat.id})
+    return {"access_token": token, "token_type": "bearer"}
+    # REFERENCE ABOVE
 
 # RACES 
 # Reference: Pydantic models for races; FastAPI POST/GET endpoints [B1][B3]
