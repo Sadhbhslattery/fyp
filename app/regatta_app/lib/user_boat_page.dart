@@ -106,6 +106,8 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // We keep a local "serverNow" that we advance between polls.
   // This avoids relying on the phone's clock.
   DateTime? serverNowUtc;
+  DateTime? sequenceStartUtc; // store once so countdown doesn’t reset
+
 
   // initState runs once when the widget is created
   // Here it is:
@@ -125,7 +127,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     _loadCurrentCourse();
     _loadClassResults();
 
-    // NEW: start listening for the live start sequence for this boat's class
+    // Start listening for the live start sequence for this boat's class
     _startStartSequenceTimers();
   }
 
@@ -150,10 +152,9 @@ class _UserBoatPageState extends State<UserBoatPage> {
     );
 
     // Local tick keeps countdown smooth between polls
-    tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (serverNowUtc != null) {
-        serverNowUtc = serverNowUtc!.add(const Duration(seconds: 1));
-        if (mounted) setState(() {});
+    tickTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (sequenceStartUtc != null) {
+        if (mounted) setState(() {}); // UI rebuild only, countdown runs off DateTime.now()
       }
     });
 
@@ -261,9 +262,11 @@ class _UserBoatPageState extends State<UserBoatPage> {
       setState(() {
         startSequence = res;
 
-        // Store server time to keep countdown accurate across devices
-        final serverTimeStr = res["server_time_utc"] as String;
-        serverNowUtc = DateTime.parse(serverTimeStr).toUtc();
+        // Only set sequenceStartUtc the first time (prevents resetting every poll)
+        if (sequenceStartUtc == null) {
+          final startStr = res["sequence_start_utc"] as String;
+          sequenceStartUtc = DateTime.parse(startStr).toUtc();
+      }
       });
     } catch (e) {
       // If no sequence exists yet, users should see a friendly waiting message
@@ -473,7 +476,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
         DateTime.parse(s["sequence_start_utc"] as String).toUtc();
 
     // Use serverNowUtc (advanced locally) to avoid phone clock drift
-    final nowUtc = serverNowUtc ??
+    final nowUtc = DateTime.now().toUtc();
         DateTime.parse(s["server_time_utc"] as String).toUtc();
 
     // The RO pressed "5-minute gun" at sequence_start_utc
