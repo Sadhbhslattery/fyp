@@ -73,7 +73,7 @@ from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
 from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
-from schemas.auth import SignupRequest, AdminLoginRequest, UserLoginRequest, TokenResponse
+from schemas.auth import SignupRequest, AdminLoginRequest, UserLoginRequest, TokenResponse, BoatAuthResponse
 from auth import hash_password, verify_password, create_access_token
 from auth_utils import hash_password, verify_password
 # REFERENCE

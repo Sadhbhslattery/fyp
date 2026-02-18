@@ -20,6 +20,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 class BoatAuthResponse(BaseModel):
-    success: bool
-    message: str
+    success: bool = True
+    message: str = "OK"
+    role: str = "competitor"
     boat: Optional[Dict[str, Any]] = None
+
