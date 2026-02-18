@@ -423,7 +423,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
                           padding: const EdgeInsets.all(16),
                           child: Text(
                             courseError ?? "No race selected yet.",
-                            style: const TextStyle(color: AppTheme.surface2),
+                            style: const TextStyle(color: Colors.white),
                           ),
                         ),
                       )
@@ -460,7 +460,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
           padding: const EdgeInsets.all(16),
           child: Text(
             startSequenceError ?? "Start sequence not started yet for your class.",
-            style: const TextStyle(color: AppTheme.surface2),
+            style: const TextStyle(color: Colors.white),
           ),
         ),
       );
@@ -608,7 +608,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
           padding: const EdgeInsets.all(16),
           child: Text(
             resultsError ?? "No timing data yet for your class today.",
-            style: const TextStyle(color: AppTheme.surface2),
+            style: const TextStyle(color: Colors.white),
           ),
         ),
       );
