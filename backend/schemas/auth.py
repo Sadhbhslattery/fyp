@@ -1,10 +1,11 @@
-#REFERENCE
+#REFERNCE 
 from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 class SignupRequest(BaseModel):
     sail_no: str
     password: str
-    owner_name: str | None = None
+    owner_name: Optional[str] = None
 
 class LoginRequest(BaseModel):
     sail_no: str
@@ -13,3 +14,8 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+class BoatAuthResponse(BaseModel):
+    success: bool
+    message: str
+    boat: Optional[Dict[str, Any]] = None
