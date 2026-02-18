@@ -80,22 +80,22 @@ class _UserLoginPageState extends State<UserLoginPage> {
             context,
             MaterialPageRoute(
               // Pass the boat object into the next screen
-              builder: (_) => UserBoatPage(boat: res.data["boat"], sailNo: '',),
+              builder: (_) => UserBoatPage(boat: res.data["boat"], sailNo: res.data["boat"]["sail_no"] ?? sailController.text.trim(),),
             ),
             // Key difference: Passes boat data to UserBoatPage constructor.
             // This is the boat object from backend containing sail_no, name, class_name, rating_value, etc.
           );
         }
 
-      } else {
-        // Server responded but login failed (wrong password, boat not found, etc.)
-        setState(() => error = res.data["message"]);
-      }
-
-    } catch (e) {
-      // Network or backend unreachable
-      setState(() => error = "Connection error");
-    }
+      } } on DioException catch (e) {
+          setState(() {
+            error = e.response?.data["detail"]?.toString()
+                ?? e.response?.data["message"]?.toString()
+                ?? "Login failed";
+          });
+        } catch (e) {
+          setState(() => error = "Unexpected error");
+        }
 
     // Stop the spinner now that login attempt has finished
     setState(() => loading = false);
