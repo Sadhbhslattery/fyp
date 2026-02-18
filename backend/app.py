@@ -73,7 +73,7 @@ from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
 from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
-from schemas.auth import SignupRequest, LoginRequest, TokenResponse, BoatAuthResponse
+from schemas.auth import SignupRequest, AdminLoginRequest, UserLoginRequest, TokenResponse
 from auth import hash_password, verify_password, create_access_token
 from auth_utils import hash_password, verify_password
 # REFERENCE
@@ -211,7 +211,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 # REFERENCE ABOVE
 
 @app.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest):
+def login(body: AdminLoginRequest):
     """
     Simple hard-coded admin login.
 
@@ -226,7 +226,7 @@ def login(body: LoginRequest):
         return LoginResponse(success=False, message="Invalid credentials")
 
 @app.post("/user-login", response_model=TokenResponse)
-def user_login(payload: LoginRequest, db: Session = Depends(get_db)):
+def user_login(payload: UserLoginRequest, db: Session = Depends(get_db)):
     boat = db.query(Boat).filter(Boat.sail_no == payload.sail_no).first()
     if not boat or not boat.owner_password:
         raise HTTPException(status_code=401, detail="Invalid login")
