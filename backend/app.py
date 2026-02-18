@@ -233,6 +233,12 @@ def user_login(payload: UserLoginRequest, db: Session = Depends(get_db)):
 
     if not verify_password(payload.password, boat.owner_password):
         raise HTTPException(status_code=401, detail="Invalid login")
+    
+    # If legacy plain text password, upgrade it to hashed
+    if not boat.owner_password.startswith("$2"):
+        boat.owner_password = hash_password(payload.password)
+        db.commit()
+
 
     token = create_access_token({"sub": boat.sail_no, "boat_id": boat.id})
     return {"access_token": token, "token_type": "bearer"}
