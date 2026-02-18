@@ -210,7 +210,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 
 # REFERENCE ABOVE
 
-@app.post("/admin-login", response_model=LoginResponse)
+@app.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest):
     """
     Simple hard-coded admin login.
@@ -225,7 +225,7 @@ def login(body: LoginRequest):
     else:
         return LoginResponse(success=False, message="Invalid credentials")
 
-@app.post("/login", response_model=TokenResponse)
+@app.post("/user-login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     boat = db.query(Boat).filter(Boat.sail_no == payload.sail_no).first()
     if not boat or not boat.owner_password:
