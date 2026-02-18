@@ -17,6 +17,7 @@ import 'package:dio/dio.dart';  // HTTP client for backend requests
 import 'package:regatta_app/theme/app_theme.dart'; // Dark Theme
 // Reference: Dio for HTTP requests [D1], login form similar pattern as admin login [F4]
 import 'user_boat_page.dart';   // Next screen after successful login
+import 'package:regatta_app/signup_page.dart'; 
 
 
 class UserLoginPage extends StatefulWidget {
@@ -157,6 +158,26 @@ class _UserLoginPageState extends State<UserLoginPage> {
                 : ElevatedButton(
                     onPressed: _login,  // Run login function
                     child: const Text("Login"),  // Button label
+                  ),
+                  // Create Account button (navigates to SignupPage)
+                  // On success, SignupPage returns the sail_no so we can prefill the login field.
+                  TextButton(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SignupPage(dio: dio),
+                        ),
+                      );
+
+                      // result will be sail_no from SignupPage (we returned Navigator.pop(context, sailNo))
+                      if (result is String && result.isNotEmpty) {
+                        setState(() {
+                          sailController.text = result; 
+                        });
+                      }
+                    },
+                    child: const Text("Create account"),
                   ),
           ],
         ),

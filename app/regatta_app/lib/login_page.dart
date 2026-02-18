@@ -12,7 +12,7 @@ import 'package:dio/dio.dart';  // HTTP client for calling the backend
 import 'package:regatta_app/theme/app_theme.dart';  // The dark theme
 import 'fleet_admin_page.dart';  // Screen to open after successful login
 import 'package:regatta_app/signup_page.dart'; // Sign Up page
-import 'package:regatta_app/user_boat_page.dart'; // User Page
+import 'package:regatta_app/user_boat_page.dart'; // User
 
 
 
@@ -208,29 +208,6 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: _attemptLogin,  // Ternary operator: if loading is true, show spinner; else show button. When button is pressed, calls _attemptLogin().
                           child: const Text("Login"),  // Button text
                         ),
-
-                  // Create Account button (navigates to SignupPage)
-                  // On success, SignupPage returns the sail_no so we can prefill the login field.
-                  TextButton(
-                    onPressed: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => SignupPage(dio: dio),
-                        ),
-                      );
-
-                      // result will be sail_no from SignupPage (we returned Navigator.pop(context, sailNo))
-                      if (result is String && result.isNotEmpty) {
-                        setState(() {
-                          usernameController.text = result; // or sailNoController.text
-                        });
-                      }
-                    },
-                    child: const Text("Create account"),
-                  ),
-
-
                 ],
               ),
             ),
