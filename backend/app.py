@@ -560,29 +560,6 @@ class BoatUpdate(BaseModel):
         return v
 
 
-@app.post("/user-login", response_model=UserLoginResponse)
-def user_login(body: UserLoginRequest, db: Session = Depends(get_db)):
-    """
-    Competitor login (boat owner) by sail number + password.
-
-    Steps:
-      1. Find boat by sail_no.
-      2. If no boat found - success=False, "Boat not found".
-      3. Check plain-text password against Boat.owner_password.
-      4. If mismatch - success=False, "Incorrect password".
-      5. If OK - success=True, message and return boat info.
-    """
-    boat = db.query(Boat).filter(Boat.sail_no == body.sail_no).first()
-    if not boat:
-        return UserLoginResponse(success=False, message="Boat not found")
-
-    # NOTE: Simple plain-text password check (for prototype)
-    # When it is a production system, this should be hashed (e.g. bcrypt)
-    if boat.owner_password != body.password:
-        return UserLoginResponse(success=False, message="Incorrect password")
-
-    return UserLoginResponse(success=True, message="Login ok", boat=boat)
-
 #BELOW IS NEW
 @app.post("/boat-signup", response_model=BoatAuthResponse)
 def boat_signup(body: SignupRequest, db: Session = Depends(get_db)):
