@@ -1,4 +1,4 @@
-// This page lets competitors (boat owners) log in using their sail number and password. 
+// This page lets competitors (boat owners) log in using their sail number and password.
 // After successful login, the backend returns the boat object and the app navigates to UserBoatPage where they can view:
 // Today's race course
 // Their class results
@@ -11,14 +11,12 @@
 // Backend endpoint: POST /user-login
 // Response: { "success": true, "boat": {...} } or { "success": false, "message": "..." }
 
-
 import 'package:flutter/material.dart'; // Flutter UI components
-import 'package:dio/dio.dart';  // HTTP client for backend requests 
+import 'package:dio/dio.dart'; // HTTP client for backend requests
 import 'package:regatta_app/theme/app_theme.dart'; // Dark Theme
 // Reference: Dio for HTTP requests [D1], login form similar pattern as admin login [F4]
-import 'user_boat_page.dart';   // Next screen after successful login
-import 'package:regatta_app/signup_page.dart'; 
-
+import 'user_boat_page.dart'; // Next screen after successful login
+import 'package:regatta_app/signup_page.dart';
 
 class UserLoginPage extends StatefulWidget {
   // stateful because of text input and API calls
@@ -30,17 +28,26 @@ class UserLoginPage extends StatefulWidget {
 
 class _UserLoginPageState extends State<UserLoginPage> {
   // The state class holds all dynamic data (text fields, loading state, errors)
-  final dio = Dio(BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"));
+  final dio = Dio(
+    BaseOptions(baseUrl: "https://web-production-9fd2e3.up.railway.app"),
+  );
   // HTTP client configured to communicate with my FastAPI backend
 
   // Text controllers to read input text from the two fields
   final sailController = TextEditingController(); // Sail Number input
   final passController = TextEditingController(); // Password input
 
-  String? error;// Error message shown under the AppBar if login fails
+  String? error; // Error message shown under the AppBar if login fails
 
   bool loading = false; // Loading flag used to display a spinner instead of Login button
- 
+
+  @override
+  void dispose() {
+    // NEW: Always dispose controllers to avoid memory leaks when leaving the page
+    sailController.dispose();
+    passController.dispose();
+    super.dispose();
+  }
 
   // Attempt Login
 
@@ -69,41 +76,71 @@ class _UserLoginPageState extends State<UserLoginPage> {
         "sail_no": sailController.text.trim(),
         "password": passController.text.trim(),
       });
-      // Sends sail number and password to backend. 
+      // Sends sail number and password to backend.
       // Note the field is "sail_no" (snake_case) to match backend Pydantic model.
 
-      // Backend signals success using success = true
-      if (res.data["success"] == true) {
+      // NEW: Print the backend response so we can see if it returned success:false with HTTP 200
+      debugPrint("USER-LOGIN RES: ${res.data}");
+
+      // NEW: Make this tolerant of different backend response shapes
+      // Most likely: { "success": true/false, "boat": {...}, "message": "..." }
+      final data = res.data;
+
+      final bool ok =
+          (data is Map && data["success"] == true) ||
+          (data is Map && data["boat"] != null);
+
+      if (ok) {
+        // NEW: Extract boat safely
+        final boat = (data is Map) ? (data["boat"] ?? data) : data;
+
         // Only navigate if widget is still mounted
         if (context.mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               // Pass the boat object into the next screen
-              builder: (_) => UserBoatPage(boat: res.data["boat"], sailNo: res.data["boat"]["sail_no"] ?? sailController.text.trim(),),
+              builder: (_) => UserBoatPage(
+                boat: boat,
+                // NEW: Previously you passed sailNo: '' which breaks downstream logic.
+                // This now passes the real sail number from the boat OR the text field.
+                sailNo: (boat is Map && boat["sail_no"] != null)
+                    ? boat["sail_no"].toString()
+                    : sailController.text.trim(),
+              ),
             ),
             // Key difference: Passes boat data to UserBoatPage constructor.
             // This is the boat object from backend containing sail_no, name, class_name, rating_value, etc.
           );
         }
-
-      } } on DioException catch (e) {
-          setState(() {
-            error = e.response?.data["detail"]?.toString()
-                ?? e.response?.data["message"]?.toString()
-                ?? "Login failed";
-          });
-        } catch (e) {
-          setState(() => error = "Unexpected error");
-        }
+      } else {
+        // Server responded but login failed (wrong password, boat not found, etc.)
+        setState(() {
+          if (data is Map) {
+            error = (data["message"] ?? data["detail"] ?? "Login failed").toString();
+          } else {
+            error = "Login failed";
+          }
+        });
+      }
+    } on DioException catch (e) {
+      // NEW: Show the real backend error body (super helpful for 401/422/500)
+      debugPrint("USER-LOGIN ERROR: ${e.response?.data}");
+      setState(() {
+        error = e.response?.data.toString() ?? "Connection error";
+      });
+    } catch (e) {
+      // Network or unknown error
+      setState(() => error = e.toString());
+    }
 
     // Stop the spinner now that login attempt has finished
-    setState(() => loading = false);
+    if (mounted) {
+      setState(() => loading = false);
+    }
   }
 
-
-  // Build Method (UI) 
-
+  // Build Method (UI)
 
   @override
   Widget build(BuildContext context) {
@@ -119,20 +156,23 @@ class _UserLoginPageState extends State<UserLoginPage> {
         // Use a Column to stack content vertically
         child: Column(
           children: [
-
             // Error Message
             if (error != null)
-              Text(
-                error!,
-                style: const TextStyle(color: AppTheme.danger),
+              Padding(
+                // NEW: little spacing so the error looks nicer
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  error!,
+                  style: const TextStyle(color: AppTheme.danger),
+                ),
               ),
 
-            // Sail Number Input 
+            // Sail Number Input
             TextField(
               controller: sailController,
               decoration: const InputDecoration(
-                labelText: "Sail Number",  // User sees this text label
-                border: OutlineInputBorder(),  // Adds visible textfield border
+                labelText: "Sail Number", // User sees this text label
+                border: OutlineInputBorder(), // Adds visible textfield border
               ),
             ),
 
@@ -141,7 +181,7 @@ class _UserLoginPageState extends State<UserLoginPage> {
             // Password input
             TextField(
               controller: passController,
-              obscureText: true,  // Hide password characters
+              obscureText: true, // Hide password characters
               decoration: const InputDecoration(
                 labelText: "Password",
                 border: OutlineInputBorder(),
@@ -156,29 +196,30 @@ class _UserLoginPageState extends State<UserLoginPage> {
                 ? const CircularProgressIndicator()
                 // Otherwise show the login button
                 : ElevatedButton(
-                    onPressed: _login,  // Run login function
-                    child: const Text("Login"),  // Button label
+                    onPressed: _login, // Run login function
+                    child: const Text("Login"), // Button label
                   ),
-                  // Create Account button (navigates to SignupPage)
-                  // On success, SignupPage returns the sail_no so we can prefill the login field.
-                  TextButton(
-                    onPressed: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => SignupPage(dio: dio),
-                        ),
-                      );
 
-                      // result will be sail_no from SignupPage (we returned Navigator.pop(context, sailNo))
-                      if (result is String && result.isNotEmpty) {
-                        setState(() {
-                          sailController.text = result; 
-                        });
-                      }
-                    },
-                    child: const Text("Create account"),
+            // Create Account button (navigates to SignupPage)
+            // On success, SignupPage returns the sail_no so we can prefill the login field.
+            TextButton(
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SignupPage(dio: dio),
                   ),
+                );
+
+                // result will be sail_no from SignupPage (we returned Navigator.pop(context, sailNo))
+                if (result is String && result.isNotEmpty) {
+                  setState(() {
+                    sailController.text = result;
+                  });
+                }
+              },
+              child: const Text("Create account"),
+            ),
           ],
         ),
       ),
@@ -186,7 +227,7 @@ class _UserLoginPageState extends State<UserLoginPage> {
   }
 }
 
-// Summary 
+// Summary
 // Very similar to admin login, but:
 // Uses sail_no instead of username
 // Calls POST /user-login
