@@ -73,8 +73,9 @@ from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
 from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
-from schemas.auth import SignupRequest, LoginRequest, TokenResponse
+from schemas.auth import SignupRequest, LoginRequest, TokenResponse, BoatAuthResponse
 from auth import hash_password, verify_password, create_access_token
+from auth_utils import hash_password, verify_password
 # REFERENCE
 
 # Application Setup
@@ -585,6 +586,58 @@ def user_login(body: UserLoginRequest, db: Session = Depends(get_db)):
 
     return UserLoginResponse(success=True, message="Login ok", boat=boat)
 
+#BELOW IS NEW
+@app.post("/boat-signup", response_model=BoatAuthResponse)
+def boat_signup(body: SignupRequest, db: Session = Depends(get_db)):
+    sail_no = body.sail_no.strip().upper()
+
+    boat = db.query(Boat).filter(Boat.sail_no == sail_no).first()
+    if not boat:
+        return {"success": False, "message": "No boat found with that sail number.", "boat": None}
+
+    if boat.owner_password and boat.owner_password.strip() != "":
+        return {"success": False, "message": "This boat already has an account. Please log in.", "boat": None}
+
+    boat.owner_password = hash_password(body.password)
+    db.commit()
+    db.refresh(boat)
+
+    return {
+        "success": True,
+        "message": "Signup successful. You can now log in anytime.",
+        "boat": {
+            "id": boat.id,
+            "sail_no": boat.sail_no,
+            "name": boat.name,
+            "class_name": boat.class_name,
+            "rating_value": boat.rating_value,
+        },
+    }
+
+
+@app.post("/boat-login", response_model=BoatAuthResponse)
+def boat_login(body: LoginRequest, db: Session = Depends(get_db)):
+    sail_no = body.sail_no.strip().upper()
+
+    boat = db.query(Boat).filter(Boat.sail_no == sail_no).first()
+    if not boat or not boat.owner_password:
+        return {"success": False, "message": "Invalid sail number or password.", "boat": None}
+
+    if not verify_password(body.password, boat.owner_password):
+        return {"success": False, "message": "Invalid sail number or password.", "boat": None}
+
+    return {
+        "success": True,
+        "message": "Login successful",
+        "boat": {
+            "id": boat.id,
+            "sail_no": boat.sail_no,
+            "name": boat.name,
+            "class_name": boat.class_name,
+            "rating_value": boat.rating_value,
+        },
+    }
+#REFERENCE ABOVE
 
 @app.get("/boats", response_model=list[BoatOut])
 # Reference: FastAPI and SQLAlchemy to query/filter and return models [B2][B4]
