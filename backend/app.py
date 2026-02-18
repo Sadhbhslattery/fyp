@@ -63,7 +63,7 @@ from db import Base, engine, SessionLocal
 # engine: Database engine (MySQL connection) configured in db.py
 # SessionLocal: factory for DB sessions (session per request pattern)
 
-from models import Race, Event, Boat, RaceStart, RaceDaySettings
+from backend.models import Race, Event, Boat, RaceStart, RaceDaySettings
 # Imports the ORM models defined in models.py. These are used to query and modify database tables.
 # Race: race table (not heavily used in this iteration)
 # Event: placeholder / future use
