@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 # HTTPException: Returns HTTP error responses (like 404 Not Found)
 from sqlalchemy.orm import Session
 # Imports Session type for type hints, enabling IDE autocomplete.
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 # Imports datetime tools: datetime for timestamps, timezone for UTC.
 
 from db import get_db
@@ -71,11 +71,10 @@ def start_sequence(payload: StartSequenceCreate, db: Session = Depends(get_db)):
 @router.get("/status", response_model=StartSequenceStatus)
 # Registers a GET endpoint at /start-sequence/status.
 def get_sequence_status(
-    class_name: str, race_date: str, db: Session = Depends(get_db)):
-    try:
-        race_date_parsed = date.fromisoformat(race_date)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="race_date must be YYYY-MM-DD")
+    class_name: str, 
+    race_date: date, 
+    db: Session = Depends(get_db),
+):
 
     seq = (
         db.query(StartSequence)
