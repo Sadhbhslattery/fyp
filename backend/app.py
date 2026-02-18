@@ -63,14 +63,14 @@ from db import Base, engine, SessionLocal
 # engine: Database engine (MySQL connection) configured in db.py
 # SessionLocal: factory for DB sessions (session per request pattern)
 
-from backend.models import Race, Event, Boat, RaceStart, RaceDaySettings
+from models import Race, Event, Boat, RaceStart, RaceDaySettings
 # Imports the ORM models defined in models.py. These are used to query and modify database tables.
 # Race: race table (not heavily used in this iteration)
 # Event: placeholder / future use
 # Boat: each competitor boat (sail_no, class_name, rating_value, etc.)
 # RaceStart: per boat, per day start/finish and timing info
 
-from backend.routes.start_sequence import router as start_sequence_router
+from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
 
