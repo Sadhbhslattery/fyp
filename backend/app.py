@@ -534,31 +534,6 @@ class BoatOut(BaseModel):
         from_attributes = True
 
 
-class UserLoginRequest(BaseModel):
-    """
-    Request body for competitor login.
-
-    They login using:
-        sail_no  and  password
-    """
-    sail_no: str
-    password: str
-
-
-class UserLoginResponse(BaseModel):
-    """
-    Response body for competitor login.
-
-    Fields:
-        success: True if login valid
-        message: user-friendly message
-        boat: BoatOut of the logged-in boat (or None on failure)
-    """
-    success: bool
-    message: str
-    boat: BoatOut | None = None
-
-
 class BoatUpdate(BaseModel):
     """
     Partial update model for boats.
