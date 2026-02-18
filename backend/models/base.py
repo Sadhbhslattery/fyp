@@ -33,7 +33,7 @@ from sqlalchemy.orm import relationship
 
 # Imports the Base class that was created in db.py. 
 # All model classes will inherit from this
-from backend.db import Base
+from db import Base
 
 
 #  Race Table
