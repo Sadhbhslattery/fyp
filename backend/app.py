@@ -231,8 +231,24 @@ def user_login(payload: UserLoginRequest, db: Session = Depends(get_db)):
     if not boat or not boat.owner_password:
         raise HTTPException(status_code=401, detail="Invalid login")
 
+    # 1) If boat not found
+    if not boat:
+        raise HTTPException(status_code=401, detail="Invalid sail number or password")
+
+    # 2) If password not set yet (user hasn't signed up)
+    if not boat.owner_password:
+        raise HTTPException(status_code=401, detail="No password set for this boat. Please sign up first.")
+
+    # 3) If password in DB is not a bcrypt hash (old/plain text data)
+    if not str(boat.owner_password).startswith("$2"):
+        # optional: print for debugging
+        # print("Bad owner_password stored for", boat.sail_no, boat.owner_password)
+        raise HTTPException(status_code=401, detail="Password needs reset. Please sign up again for this boat.")
+
+    # 4) Normal verify
     if not verify_password(payload.password, boat.owner_password):
-        raise HTTPException(status_code=401, detail="Invalid login")
+        raise HTTPException(status_code=401, detail="Invalid sail number or password")
+
     
     # If legacy plain text password, upgrade it to hashed
     if not boat.owner_password.startswith("$2"):
