@@ -226,7 +226,7 @@ def login(body: LoginRequest):
         return LoginResponse(success=False, message="Invalid credentials")
 
 @app.post("/user-login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def user_login(payload: LoginRequest, db: Session = Depends(get_db)):
     boat = db.query(Boat).filter(Boat.sail_no == payload.sail_no).first()
     if not boat or not boat.owner_password:
         raise HTTPException(status_code=401, detail="Invalid login")

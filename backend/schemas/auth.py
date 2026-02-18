@@ -7,7 +7,11 @@ class SignupRequest(BaseModel):
     password: str
     owner_name: Optional[str] = None
 
-class LoginRequest(BaseModel):
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class UserLoginRequest(BaseModel):
     sail_no: str
     password: str
 
