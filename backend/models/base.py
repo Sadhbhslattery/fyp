@@ -250,18 +250,18 @@ class RaceStart(Base):
 
 # Source for above section: SQLAlchemy ORM mapping/relationships docs : https://fastapi.tiangolo.com/pt/advanced/custom-response/
 
-class StartSequence(Base):
+# class StartSequence(Base):
     # Stores information about start sequences (countdown timers for different classes). 
     # This supports features like displaying which flag is flying and when the gun will fire.
 
-    __tablename__ = "start_sequences"
+     #__tablename__ = "start_sequences"
 
-    id = Column(Integer, primary_key=True)
-    class_name = Column(String(50), nullable=False) # Which class this sequence is for (e.g., 'White Sail 1').
-    race_date = Column(Date, nullable=False)
-    prep_flag = Column(String(10), nullable=False)
-    sequence_start_utc = Column(DateTime, nullable=False)
-    status = Column(String(20), nullable=False) # Current status (e.g., 'STARTED' after gun).
+    #id = Column(Integer, primary_key=True)
+    #class_name = Column(String(50), nullable=False) # Which class this sequence is for (e.g., 'White Sail 1').
+    #race_date = Column(Date, nullable=False)
+    #prep_flag = Column(String(10), nullable=False)
+    #sequence_start_utc = Column(DateTime, nullable=False)
+    #status = Column(String(20), nullable=False) # Current status (e.g., 'STARTED' after gun).
 
 # Summary of base.py
 #models.py defines 7 tables:

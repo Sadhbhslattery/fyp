@@ -3,7 +3,7 @@
 
 from sqlalchemy import Column, Integer, String, Date, DateTime
 from sqlalchemy.sql import func
-from database import Base  # your existing declarative base
+from db import Base  # your existing declarative base
 
 class StartSequence(Base):
     __tablename__ = "start_sequences"
