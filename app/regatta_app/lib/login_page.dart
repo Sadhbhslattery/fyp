@@ -11,8 +11,6 @@ import 'package:flutter/material.dart'; // Flutter UI framework
 import 'package:dio/dio.dart';  // HTTP client for calling the backend
 import 'package:regatta_app/theme/app_theme.dart';  // The dark theme
 import 'fleet_admin_page.dart';  // Screen to open after successful login
-import 'package:regatta_app/signup_page.dart'; // Sign Up page
-import 'package:regatta_app/user_boat_page.dart'; // User
 
 
 
@@ -78,39 +76,28 @@ class _LoginPageState extends State<LoginPage> {
     try {
       // POST request to backend with login data
       final res = await dio.post("/login", data: {
-        "sail_no": usernameController.text.trim(),  // Trim removes spaces
+        "username": usernameController.text.trim(),  // Trim removes spaces
         "password": passwordController.text.trim(),
       });
       // Sends credentials to backend. await pauses until response arrives.
 
       // The backend returns success: true or false
-      final role = res.data["role"];
-
-      if (role == "admin") {
+      // The backend returns success: true or false
+      if (res.data["success"] == true) {
+        // Backend accepted credentials
+        // Navigate to the admin fleet page
         if (context.mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const FleetAdminPage()),
           );
         }
-      } else if (role == "competitor") {
-        if (context.mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => UserBoatPage(
-                sailNo: usernameController.text.trim(), boat: {},
-              ),
-            ),
-          );
-        }
       } else {
+        // Backend responded but credentials were wrong
         setState(() {
-          errorMessage = "Invalid login response";
+          errorMessage = "Invalid username or password";
         });
       }
-
-
 
     } catch (e) {
       // If connection fails entirely (backend not running), show generic message
@@ -172,7 +159,7 @@ class _LoginPageState extends State<LoginPage> {
                   TextFormField(
                     controller: usernameController, // Reads/writes username text
                     decoration: const InputDecoration(
-                      labelText: "Sail number",        // Field label
+                      labelText: "Username",        // Field label
                       border: OutlineInputBorder(), // Standard boxed style
                     ),
                     validator: (v) =>
