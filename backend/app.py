@@ -225,39 +225,34 @@ def login(body: AdminLoginRequest):
     else:
         return LoginResponse(success=False, message="Invalid credentials")
 
-@app.post("/user-login", response_model=TokenResponse)
+@app.post("/user-login")
 def user_login(payload: UserLoginRequest, db: Session = Depends(get_db)):
     boat = db.query(Boat).filter(Boat.sail_no == payload.sail_no).first()
-    if not boat or not boat.owner_password:
-        raise HTTPException(status_code=401, detail="Invalid login")
 
-    # 1) If boat not found
     if not boat:
         raise HTTPException(status_code=401, detail="Invalid sail number or password")
 
-    # 2) If password not set yet (user hasn't signed up)
     if not boat.owner_password:
-        raise HTTPException(status_code=401, detail="No password set for this boat. Please sign up first.")
+        raise HTTPException(status_code=401, detail="No password set. Please sign up first.")
 
-    # 3) If password in DB is not a bcrypt hash (old/plain text data)
     if not str(boat.owner_password).startswith("$2"):
-        # optional: print for debugging
-        # print("Bad owner_password stored for", boat.sail_no, boat.owner_password)
-        raise HTTPException(status_code=401, detail="Password needs reset. Please sign up again for this boat.")
+        raise HTTPException(status_code=401, detail="Password needs reset. Please sign up again.")
 
-    # 4) Normal verify
     if not verify_password(payload.password, boat.owner_password):
         raise HTTPException(status_code=401, detail="Invalid sail number or password")
 
-    
-    # If legacy plain text password, upgrade it to hashed
-    if not boat.owner_password.startswith("$2"):
-        boat.owner_password = hash_password(payload.password)
-        db.commit()
-
-
-    token = create_access_token({"sub": boat.sail_no, "boat_id": boat.id})
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+        "success": True,
+        "message": "Login successful",
+        "boat": {
+            "id": boat.id,
+            "sail_no": boat.sail_no,
+            "name": boat.name,
+            "club": boat.club,
+            "class_name": boat.class_name,
+            "rating_value": boat.rating_value,
+        }
+    }
     # REFERENCE ABOVE
 
 # RACES 
