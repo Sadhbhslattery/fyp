@@ -79,7 +79,7 @@ class _UserLoginPageState extends State<UserLoginPage> {
             context,
             MaterialPageRoute(
               // Pass the boat object into the next screen
-              builder: (_) => UserBoatPage(boat: res.data["boat"]),
+              builder: (_) => UserBoatPage(boat: res.data["boat"], sailNo: '',),
             ),
             // Key difference: Passes boat data to UserBoatPage constructor.
             // This is the boat object from backend containing sail_no, name, class_name, rating_value, etc.

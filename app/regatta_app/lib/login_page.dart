@@ -11,6 +11,10 @@ import 'package:flutter/material.dart'; // Flutter UI framework
 import 'package:dio/dio.dart';  // HTTP client for calling the backend
 import 'package:regatta_app/theme/app_theme.dart';  // The dark theme
 import 'fleet_admin_page.dart';  // Screen to open after successful login
+import 'package:regatta_app/signup_page.dart'; // Sign Up page
+import 'package:regatta_app/user_boat_page.dart'; // User Page
+
+
 
 class LoginPage extends StatefulWidget {
   // StatefulWidget because the form has changing data (text input, loading state, errors)
@@ -74,33 +78,39 @@ class _LoginPageState extends State<LoginPage> {
     try {
       // POST request to backend with login data
       final res = await dio.post("/login", data: {
-        "username": usernameController.text.trim(),  // Trim removes spaces
+        "sail_no": usernameController.text.trim(),  // Trim removes spaces
         "password": passwordController.text.trim(),
       });
       // Sends credentials to backend. await pauses until response arrives.
 
       // The backend returns success: true or false
-      if (res.data["success"] == true) {
-        // Backend accepted credentials
-        // Navigate to the admin fleet page
+      final role = res.data["role"];
 
+      if (role == "admin") {
         if (context.mounted) {
-          // context.mounted: Safety check. If user navigates away during the async operation, context becomes invalid. 
-          // This check prevents calling Navigator on invalid context.
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const FleetAdminPage()),
           );
-          // pushReplacement: Replaces current page instead of pushing on top. 
-          // This means admin cannot press "back" to return to login (they must logout).
         }
-
+      } else if (role == "competitor") {
+        if (context.mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserBoatPage(
+                sailNo: usernameController.text.trim(), boat: {},
+              ),
+            ),
+          );
+        }
       } else {
-        // Backend responded but credentials were wrong
         setState(() {
-          errorMessage = "Invalid username or password";
+          errorMessage = "Invalid login response";
         });
       }
+
+
 
     } catch (e) {
       // If connection fails entirely (backend not running), show generic message
@@ -162,7 +172,7 @@ class _LoginPageState extends State<LoginPage> {
                   TextFormField(
                     controller: usernameController, // Reads/writes username text
                     decoration: const InputDecoration(
-                      labelText: "Username",        // Field label
+                      labelText: "Sail number",        // Field label
                       border: OutlineInputBorder(), // Standard boxed style
                     ),
                     validator: (v) =>
@@ -198,6 +208,29 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: _attemptLogin,  // Ternary operator: if loading is true, show spinner; else show button. When button is pressed, calls _attemptLogin().
                           child: const Text("Login"),  // Button text
                         ),
+
+                  // Create Account button (navigates to SignupPage)
+                  // On success, SignupPage returns the sail_no so we can prefill the login field.
+                  TextButton(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SignupPage(dio: dio),
+                        ),
+                      );
+
+                      // result will be sail_no from SignupPage (we returned Navigator.pop(context, sailNo))
+                      if (result is String && result.isNotEmpty) {
+                        setState(() {
+                          usernameController.text = result; // or sailNoController.text
+                        });
+                      }
+                    },
+                    child: const Text("Create account"),
+                  ),
+
+
                 ],
               ),
             ),

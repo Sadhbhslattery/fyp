@@ -35,7 +35,7 @@ class UserBoatPage extends StatefulWidget {
   // Boat information passed in (includes id, sail_no, name, club, class_name, rating, etc.)
   final Map<String, dynamic> boat;
 
-  const UserBoatPage({super.key, required this.boat});
+  const UserBoatPage({super.key, required this.boat, required String sailNo});
 
   @override
   State<UserBoatPage> createState() => _UserBoatPageState();
