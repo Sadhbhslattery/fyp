@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 from db import get_db
 # Imports the get_db function that provides database sessions via dependency injection.
 
-from models import StartSequence
+from models.start_sequence import StartSequence
+from schemas.start_sequence import StartSequenceCreate, StartSequenceStatus
 # Imports the StartSequence ORM model representing the start_sequences table.
 
 router = APIRouter(
@@ -30,30 +31,27 @@ router = APIRouter(
 
 # POST: Admin fires 5-minute gun
 
-@router.post("/start")
+@router.post("/start", response_model=StartSequenceStatus)
 # Registers a POST endpoint at /start-sequence/start.
-def start_sequence(
-    class_name: str,
-    race_date: str,
-    prep_flag: str = "P",
-    db: Session = Depends(get_db), # Database session from dependency injection
-):
-    # Always allow class_name – classes come from DB
+def start_sequence(payload: StartSequenceCreate, db: Session = Depends(get_db)):
     seq = StartSequence(
-        class_name=class_name,
-        race_date=race_date,
-        prep_flag=prep_flag,
+        class_name=payload.class_name,
+        rrace_date=payload.race_date,
+        prep_flag=payload.prep_flag,
         sequence_start_utc=datetime.now(timezone.utc),
         status="RUNNING",
+)
+    
     # Creates a new StartSequence object with provided fields plus:
     # sequence_start_utc=datetime.now(timezone.utc) - Current time in UTC, marking when the 5-minute gun fired
     # status="RUNNING" - Indicates the countdown is active
 
-    )
 
     db.add(seq)  # Stages the object for insertion (doesn't execute SQL yet).
     db.commit()  # Executes the SQL INSERT, permanently saving the record.
     db.refresh(seq)  # Refreshes the object from database to get auto-generated ID.
+
+    now = datetime.now(timezone.utc)
 
     return {
         "id": seq.id,
@@ -62,6 +60,7 @@ def start_sequence(
         "prep_flag": seq.prep_flag,
         "sequence_start_utc": seq.sequence_start_utc,
         "status": seq.status,
+        "server_time_utc": now,
     # Returns a dictionary with all sequence details. FastAPI converts this to JSON.
     }
 
@@ -69,13 +68,15 @@ def start_sequence(
 
 # GET: Boats read the active sequence
 
-@router.get("/status")
+@router.get("/status", response_model=StartSequenceStatus)
 # Registers a GET endpoint at /start-sequence/status.
 def get_sequence_status(
-    class_name: str,
-    race_date: str,
-    db: Session = Depends(get_db),
-):
+    class_name: str, race_date: str, db: Session = Depends(get_db)):
+    try:
+        race_date_parsed = date.fromisoformat(race_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="race_date must be YYYY-MM-DD")
+
     seq = (
         db.query(StartSequence)
         .filter(
@@ -102,6 +103,7 @@ def get_sequence_status(
         "race_date": seq.race_date,
         "prep_flag": seq.prep_flag,
         "sequence_start_utc": seq.sequence_start_utc,
+        "status": seq.status,
         "server_time_utc": datetime.now(timezone.utc),
     }
 
