@@ -73,10 +73,21 @@ from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
 from routes.start_sequence import router as start_sequence_router
 # Imports a router for start sequence endpoints (defined in a separate file).
 
-from schemas.auth import SignupRequest, AdminLoginRequest, UserLoginRequest, TokenResponse, BoatAuthResponse
-from auth import hash_password, verify_password, create_access_token
-from auth_utils import hash_password, verify_password
-# REFERENCE
+from schemas.auth import SignupRequest, AdminLoginRequest, UserLoginRequest, BoatAuthResponse
+# Imports the four Pydantic schemas used by the authentication endpoints:
+#   SignupRequest  – body for POST /signup and POST /boat-signup
+#   AdminLoginRequest  – body for POST /login (race officer login)
+#   UserLoginRequest  – body for POST /user-login (competitor login)
+#   BoatAuthResponse  – response model for POST /boat-signup and /boat-login
+# Reference: Pydantic v2 models [B3]
+# Reference: FastAPI request body and response_model [B1]
+
+from auth import hash_password, verify_password
+# Imports the two password utility functions from auth.py:
+#   hash_password(password)  - bcrypt hash string (used at signup)
+#   verify_password(plain, stored) -True/False  (used at login)
+# Reference: passlib bcrypt [B15]
+
 
 # Application Setup
 
@@ -1442,3 +1453,4 @@ def reset_race_day(
 # Reference: CORS middleware configuration [B1]
 # Reference: APIRouter inclusion [B1]
 # Reference: Uvicorn server configuration [B1]
+# https://claude.ai/chat/5aaf872e-804a-4b53-a26a-e5173bab6142
