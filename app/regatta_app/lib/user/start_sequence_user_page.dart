@@ -133,7 +133,6 @@ class _StartSequenceUserPageState extends State<StartSequenceUserPage> {
     // class_name, race_date, prep_flag, sequence_start_utc, server_time_utc, status
     final className = (s["class_name"] ?? s["className"]) as String? ?? widget.className;
     final raceDate = (s["race_date"] ?? s["raceDate"]) as String? ?? widget.raceDate;
-    final prepFlag = (s["prep_flag"] ?? s["prepFlag"]) as String? ?? "P";
     final statusText = (s["status"] ?? "ACTIVE").toString();
 
     // Sequence timeline:

@@ -484,10 +484,6 @@ class _UserBoatPageState extends State<UserBoatPage> {
     final startMomentUtc = seqStartUtc.add(const Duration(minutes: 5));
     final timeToStart = startMomentUtc.difference(nowUtc);
 
-    final prepFlag = (s["prep_flag"] as String?) ?? "P";
-
-    // The preparatory flag goes DOWN at 1 minute to start.
-    final showPrepFlag = timeToStart > const Duration(minutes: 1);
 
     return Card(
       // Light background to differentiate from the other cards
