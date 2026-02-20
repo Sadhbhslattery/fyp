@@ -566,7 +566,7 @@ class BoatUpdate(BaseModel):
         return v
 
 
-#BELOW IS NEW
+
 @app.post("/boat-signup", response_model=BoatAuthResponse)
 def boat_signup(body: SignupRequest, db: Session = Depends(get_db)):
     sail_no = body.sail_no.strip().upper()
@@ -1453,4 +1453,4 @@ def reset_race_day(
 # Reference: CORS middleware configuration [B1]
 # Reference: APIRouter inclusion [B1]
 # Reference: Uvicorn server configuration [B1]
-# https://claude.ai/chat/5aaf872e-804a-4b53-a26a-e5173bab6142
+# Reference: https://claude.ai/chat/5aaf872e-804a-4b53-a26a-e5173bab6142
