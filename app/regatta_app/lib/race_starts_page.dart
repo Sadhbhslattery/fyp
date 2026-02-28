@@ -7,6 +7,7 @@
 // See boats currently racing and finished, grouped by class (boats and race-start rows joined in UI)
 // Record finishes (writes finish_time and options to DB via POST /race-finish)
 // See which competitors have checked in for today's race (read from DB via GET /check-ins)
+// Reset all timing and check-in data for today (DELETE /race-day with confirmation)
 // Refresh data manually (Refresh button) or by pull-to-refresh
 
 // DATABASE IN PLAIN ENGLISH
@@ -40,6 +41,7 @@
 // _fireFiveMinuteGun(className): Calls StartSequenceApi.start()
 // _finishBoatWithOptions(boat): Bottom sheet with OCS toggle and penalty input, POST /race-finish
 // _checkedInForClass(className): Returns list of check-in records for a given class
+// _resetRaceDay(): Confirmation dialog then DELETE /race-day to wipe today's data
 
 
 import 'dart:async';
@@ -460,160 +462,136 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
 // 3) If confirmed, posts to FastAPI POST /race-finish with:
 //    boat_id, race_date, finish_time, ocs, penalty_seconds
 // 4) Reloads /boats and /race-starts so the UI updates instantly
-Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
-  final boatId = boat["id"] as int;
-
-  // Look up today's timing record for this boat (from /race-starts)
-  final startRecord = startsByBoatId[boatId];
-
-  // Safety check: must have a start time before you can finish
-  if (startRecord == null || startRecord["start_time"] == null) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("No start time recorded yet for ${boat['sail_no']}.")),
-    );
-    return;
-  }
-
-  // Local values controlled by the bottom sheet UI
-  bool ocs = false;
-  final penaltyController = TextEditingController(text: "0");
-
-  // Bottom sheet to capture options
-  final confirmed = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (context) {
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 16,
-          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Finish options", style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-
-            // OCS toggle
-            StatefulBuilder(
-              builder: (context, setModalState) {
-                return SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text("Mark as OCS"),
-                  value: ocs,
-                  onChanged: (v) => setModalState(() => ocs = v),
-                );
-              },
-            ),
-
-            // Penalty seconds input
-            TextField(
-              controller: penaltyController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: "Penalty (seconds)",
-                hintText: "0",
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Cancel / Confirm
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text("Cancel"),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text("Record finish"),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    },
-  );
-
-  if (confirmed != true) return;
-
-  // Parse penalty safely
-  final penaltySeconds = int.tryParse(penaltyController.text.trim()) ?? 0;
-
-  // Capture finish time as "HH:MM:SS"
-  final now = DateTime.now();
-  final finishTime =
-      "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
-
-  try {
-    // POST to backend: this updates the race_starts row in MySQL for this boat/date
-    await dio.post("/race-finish", data: {
-      "boat_id": boatId,
-      "race_date": todayDate,
-      "finish_time": finishTime,
-      "ocs": ocs,
-      "penalty_seconds": penaltySeconds,
-    });
-
-    // Reload to refresh lists and times
-    await _loadData();
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Finish recorded for ${boat['sail_no']} at $finishTime")),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Failed to record finish")),
-    );
-  }
-}
-
-
-  // Boat Card
-
-  Widget _boatTile(Map<String, dynamic> boat, {required bool showFinish}) {
+  Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
     final boatId = boat["id"] as int;
-    final record = startsByBoatId[boatId];
 
-    final startStr = record?["start_time"] as String?;
-    final finishStr = record?["finish_time"] as String?;
+    // Look up today's timing record for this boat (from /race-starts)
+    final startRecord = startsByBoatId[boatId];
 
-    return Card(
-      child: ListTile(
-        title: Text("${boat["sail_no"]} — ${boat["name"]}"),
-        subtitle: Text("Start: ${startStr ?? "—"}   Finish: ${finishStr ?? "—"}"),
-        trailing: showFinish
-            ? ElevatedButton(
-                onPressed: () => _finishBoatWithOptions(boat),
-                child: const Text("Finish"),
-              )
-            : const Icon(Icons.check_circle_outline),
+    // Safety check: must have a start time before you can finish
+    if (startRecord == null || startRecord["start_time"] == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("No start time recorded yet for ${boat['sail_no']}.")),
+      );
+      return;
+    }
+
+    // Local values controlled by the bottom sheet UI
+    bool ocs = false;
+    final penaltyController = TextEditingController(text: "0");
+
+    // Bottom sheet to capture options
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Finish options", style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+
+              // OCS toggle
+              StatefulBuilder(
+                builder: (context, setModalState) {
+                  return SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Mark as OCS"),
+                    value: ocs,
+                    onChanged: (v) => setModalState(() => ocs = v),
+                  );
+                },
+              ),
+
+              // Penalty seconds input
+              TextField(
+                controller: penaltyController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Penalty (seconds)",
+                  hintText: "0",
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Cancel / Confirm
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text("Cancel"),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text("Record finish"),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
+
+    if (confirmed != true) return;
+
+    // Parse penalty safely
+    final penaltySeconds = int.tryParse(penaltyController.text.trim()) ?? 0;
+
+    // Capture finish time as "HH:MM:SS"
+    final now = DateTime.now();
+    final finishTime =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+
+    try {
+      // POST to backend: this updates the race_starts row in MySQL for this boat/date
+      await dio.post("/race-finish", data: {
+        "boat_id": boatId,
+        "race_date": todayDate,
+        "finish_time": finishTime,
+        "ocs": ocs,
+        "penalty_seconds": penaltySeconds,
+      });
+
+      // Reload to refresh lists and times
+      await _loadData();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Finish recorded for ${boat['sail_no']} at $finishTime")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to record finish")),
+      );
+    }
   }
 
 
-  // UI
-
-// Reset Race Day
+  // Reset Race Day
   // Calls DELETE /race-day to clear all timing data and check-ins for today.
   // Shows a confirmation dialog first to prevent accidental data loss.
+  // After reset, competitors will see the check-in dialog again on next login
+  // since their check-in records have been cleared from the database.
   Future<void> _resetRaceDay() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -655,6 +633,34 @@ Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
       }
     }
   }
+
+
+  // Boat Card
+
+  Widget _boatTile(Map<String, dynamic> boat, {required bool showFinish}) {
+    final boatId = boat["id"] as int;
+    final record = startsByBoatId[boatId];
+
+    final startStr = record?["start_time"] as String?;
+    final finishStr = record?["finish_time"] as String?;
+
+    return Card(
+      child: ListTile(
+        title: Text("${boat["sail_no"]} — ${boat["name"]}"),
+        subtitle: Text("Start: ${startStr ?? "—"}   Finish: ${finishStr ?? "—"}"),
+        trailing: showFinish
+            ? ElevatedButton(
+                onPressed: () => _finishBoatWithOptions(boat),
+                child: const Text("Finish"),
+              )
+            : const Icon(Icons.check_circle_outline),
+      ),
+    );
+  }
+
+
+  // UI
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -826,6 +832,7 @@ class StartSequenceStatusDto {
 // 4. Records finishes with OCS/penalty options
 // 5. Provides both manual refresh and pull-to-refresh
 // 6. Displays check-in confirmations from competitors as compact chips
+// 7. Reset Race Day button (red trash icon) clears all timing and check-in data with confirmation
 
 // This is the heart of the race timing system.
 
@@ -840,9 +847,10 @@ class StartSequenceStatusDto {
 // Reference: SwitchListTile for OCS toggle [F11]
 // Reference: TextField for penalty input [F4]
 // Reference: ElevatedButton and OutlinedButton [F1]
-// Reference: Dio GET/POST methods [D1][D3]
+// Reference: Dio GET/POST/DELETE methods [D1][D3]
 // Reference: FastAPI timing endpoints [B1]
 // Reference: Query parameters for date filtering [B11]
 // Reference: SnackBar for feedback [F7]
 // Reference: Card for countdown display [F19]
 // Reference: Chip widget for compact check-in display [F28]
+// Reference: showDialog for destructive action confirmation [F9]
