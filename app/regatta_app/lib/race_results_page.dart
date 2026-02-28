@@ -412,6 +412,7 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
                   final pos = r["position"];
                   final elapsed = r["elapsed_seconds"] as int?;
                   final corrected = r["corrected_seconds"] as num?;
+                  final code = (r["result_code"] as String?) ?? (r["code"] as String?) ?? "";
 
                   // Build a single table row
                   return DataRow(
@@ -422,7 +423,7 @@ class _RaceResultsPageState extends State<RaceResultsPage> {
                       DataCell(Text((r["rating_value"] as num).toString())),
                       DataCell(Text(_formatDuration(elapsed))),
                       DataCell(Text(_formatDuration(corrected))),
-                      DataCell(Text((r["code"] as String?) ?? "")),
+                      DataCell(Text(code)),
                       DataCell(Text(r["position"]?.toString() ?? "-")),
                     ],
                   );

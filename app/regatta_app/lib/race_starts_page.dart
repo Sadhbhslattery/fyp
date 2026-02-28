@@ -478,7 +478,7 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     }
 
     // Local values controlled by the bottom sheet UI
-    bool ocs = false;
+    String? resultCode; // null = normal finish, or "OCS", "DNF", "DNS", etc.
     final penaltyController = TextEditingController(text: "0");
 
     // Bottom sheet to capture options
@@ -503,26 +503,44 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
               Text("Finish options", style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
 
-              // OCS toggle
+              // Result Code dropdown (Normal / OCS / DNF / DNS etc.)
               StatefulBuilder(
                 builder: (context, setModalState) {
-                  return SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("Mark as OCS"),
-                    value: ocs,
-                    onChanged: (v) => setModalState(() => ocs = v),
+                  return DropdownButtonFormField<String>(
+                    initialValue: resultCode,
+                    decoration: const InputDecoration(
+                      labelText: "Result Code",
+                      helperText: "Leave blank for a normal finish",
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text("Normal Finish")),
+                      DropdownMenuItem(value: "OCS", child: Text("OCS - On Course Side")),
+                      DropdownMenuItem(value: "DNS", child: Text("DNS - Did Not Start")),
+                      DropdownMenuItem(value: "DNF", child: Text("DNF - Did Not Finish")),
+                      DropdownMenuItem(value: "RET", child: Text("RET - Retired")),
+                      DropdownMenuItem(value: "DSQ", child: Text("DSQ - Disqualified")),
+                      DropdownMenuItem(value: "BFD", child: Text("BFD - Black Flag")),
+                    ],
+                    onChanged: (v) => setModalState(() => resultCode = v),
                   );
                 },
               ),
 
               // Penalty seconds input
-              TextField(
-                controller: penaltyController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Penalty (seconds)",
-                  hintText: "0",
-                ),
+              StatefulBuilder(
+                builder: (context, setModalState) {
+                  final isDns = resultCode == "DNS";
+                  return TextField(
+                    controller: penaltyController,
+                    enabled: !isDns,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Penalty (seconds)",
+                      hintText: "0",
+                      helperText: isDns ? "DNS has no finish/penalty" : null,
+                    ),
+                  );
+                },
               ),
 
               const SizedBox(height: 16),
@@ -567,7 +585,7 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
         "boat_id": boatId,
         "race_date": todayDate,
         "finish_time": finishTime,
-        "ocs": ocs,
+        "result_code": resultCode,
         "penalty_seconds": penaltySeconds,
       });
 
