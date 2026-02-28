@@ -226,6 +226,8 @@ class RaceStart(Base):
     # When the boat finished. 
     # Initially NULL (None), set when the race officer presses 'Finish' for this boat.
 
+
+
     # Computed values (nullable until finished)
     elapsed_seconds = Column(Integer, nullable=True)
     corrected_seconds = Column(Float, nullable=True)
@@ -241,6 +243,11 @@ class RaceStart(Base):
     penalty_seconds = Column(Integer, nullable=True) # added to elapsed
     # Time penalty in seconds (e.g., 30 seconds for a rules violation). 
     # Added to elapsed_seconds when calculating corrected_seconds.
+
+    result_code = Column(String(10), nullable=True) 
+    # Result code support — stores World Sailing codes like OCS, DNF, DNS, RET, DSQ, BFD
+    # None means a normal finish. Replaces the ocs integer flag for richer result handling.
+    
 
     # ORM: RaceStart.boat gives full Boat object
     boat = relationship("Boat")

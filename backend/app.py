@@ -1338,6 +1338,7 @@ class RaceStartDetailOut(BaseModel):
     finish_time: time | None = None
     elapsed_seconds: int | None = None
     corrected_seconds: float | None = None
+    result_code: str | None = None 
 
     class Config:
         from_attributes = True
@@ -1373,6 +1374,7 @@ class RaceFinishIn(BaseModel):
     # None means "do not change the current OCS flag".
     penalty_seconds: int | None = None
     # None means "do not change the current penalty value".
+    result_code: str | None = None  # "OCS", "DNF", "DNS", "RET", "DSQ", "BFD" or None
 
 # Reference: Pydantic models with date and time fields [B3][B5]
 
@@ -1424,6 +1426,7 @@ class RaceResultOut(BaseModel):
     start_time: time | None = None
     finish_time: time | None = None
     code: str | None = None
+    result_code: str | None = None 
     elapsed_seconds: int | None = None
     corrected_seconds: float | None = None
     position: int | None = None
@@ -1780,15 +1783,18 @@ def record_finish(body: RaceFinishIn, db: Session = Depends(get_db)):
     if not boat:
         raise HTTPException(status_code=404, detail="Boat not found")
 
-    # Apply OCS / penalty updates if provided in the finish request.
-    if body.ocs is not None:
+    # Apply result_code if provided (new style — OCS, DNF, DNS, RET, DSQ, BFD)
+    if body.result_code is not None:
+        start.result_code = body.result_code
+        # Keep ocs integer in sync for backwards compatibility
+        start.ocs = 1 if body.result_code == "OCS" else 0
+    elif body.ocs is not None:
+        # Fallback for old-style ocs boolean
         start.ocs = 1 if body.ocs else 0
-        # Store OCS as integer 0/1 (MySQL TINYINT).
-        # Reference: MySQL TINYINT [B7]
+        start.result_code = "OCS" if body.ocs else None
 
     if body.penalty_seconds is not None:
         start.penalty_seconds = body.penalty_seconds
-        # Apply penalty if provided; None leaves the existing value unchanged.
 
     # Set finish time.
     start.finish_time = body.finish_time
@@ -1822,11 +1828,9 @@ def record_finish(body: RaceFinishIn, db: Session = Depends(get_db)):
     # Default to 0 if penalty_seconds is None.
     adjusted_elapsed = elapsed + penalty
 
-    # If OCS is flagged, keep corrected_seconds as None (treated as "unplaced").
-    if start.ocs == 1:
+    # If Code is flagged, keep corrected_seconds as None (treated as "unplaced").
+    if start.result_code in ("OCS", "DNF", "DNS", "RET", "DSQ", "BFD"):
         start.corrected_seconds = None
-        # OCS boats are unplaced — the sort_key sentinel in race_results_for_class
-        # puts them at the bottom of the results list.
         # Reference: World Sailing result codes [S1]
     else:
         start.corrected_seconds = adjusted_elapsed * boat.rating_value
@@ -1898,14 +1902,16 @@ def race_results_for_class(
         Reference: Python sorted() with key function [B21]
         """
         start, _ = item
-        # OCS always at the bottom.
+        # Any result code (OCS, DNF, DNS, etc.) goes to the bottom
+        if start.result_code is not None:
+            return 10**13
+        # Legacy ocs flag support
         if start.ocs == 1:
             return 10**13
-
         return (
             start.corrected_seconds
             if start.corrected_seconds is not None
-            else 10**12  # large sentinel value for unfinished boats
+            else 10**12
         )
 
     # Sort by corrected time ascending (lower = faster = better position).
@@ -1918,11 +1924,11 @@ def race_results_for_class(
 
     for start, boat in temp_sorted:
         corr = start.corrected_seconds
-        is_ocs = (start.ocs == 1)
+        has_code = start.result_code is not None or start.ocs == 1
 
         # If corrected time is present and no OCS, assign position; else leave as None.
-        pos = (position_counter if (corr is not None and not is_ocs) else None)
-        if corr is not None and not is_ocs:
+        pos = (position_counter if (corr is not None and not has_code) else None)
+        if corr is not None and not has_ocs:
             position_counter += 1
             # Increment only for placed boats.
 
@@ -1940,6 +1946,7 @@ def race_results_for_class(
                 position=pos,
                 code=("OCS" if start.ocs == 1 else None),
                 # "OCS" is the World Sailing standard result code for On Course Side.
+                result_code=start.result_code,
                 # Reference: World Sailing result codes [S1]
             )
         )
@@ -2111,8 +2118,8 @@ def export_sailwave_race_csv(
     for start, boat in temp_sorted:
         # Scoring code — Sailwave supports OCS, DNF, DNS, etc.
         # Currently only OCS is implemented; DNF/DNS are future work.
-        code = ""
-        if start.ocs == 1:
+        code = start.result_code or ""
+        if not code and start.ocs == 1:
             code = "OCS"
             # "OCS" is the World Sailing standard result code for On Course Side.
         # If you later add DNF/DNS flags to your DB, map them here too.
@@ -2124,14 +2131,14 @@ def export_sailwave_race_csv(
 
         writer.writerow(
             [
-                race_no,     # raceno
-                class_name,    # class
-                boat.sail_no,   # sailno
-                _time_to_sailwave_str(start.start_time),   # start (HH:MM:SS)
+                race_no, # raceno
+                class_name, # class
+                boat.sail_no, # sailno
+                _time_to_sailwave_str(start.start_time),  # start (HH:MM:SS)
                 _time_to_sailwave_str(start.finish_time), # finish (HH:MM:SS)
-                _seconds_to_elapsed_str(start.elapsed_seconds),  # elapsed (HH:MM:SS)
-                code,  # code (OCS or blank)
-                place_str,  # place (integer or blank)
+                _seconds_to_elapsed_str(start.elapsed_seconds), # elapsed (HH:MM:SS)
+                code, # code (OCS or blank)
+                place_str, # place (integer or blank)
             ]
         )
 
