@@ -2,12 +2,15 @@
 // It is personalised to a single boat and shows:
 
 // Static boat information (name, sail number, class, rating, club)
+// Check-in status (whether the competitor has confirmed they are racing today)
 // "Today's course" details (if the race officer has selected a course)
 //  Today's results table for that boat's class (White Sail 1, etc.)
 //  The user's own boat is highlighted in the table
 // The page pulls data from the backend via FastAPI endpoints:
 //  GET /current-course - what course (and start time) is selected today
 //  GET /race-results   - per-class results (elapsed and corrected times)
+//  GET /check-ins      - whether this boat has already checked in today
+//  POST /check-in      - confirm this boat is racing today
 
 // This allows sailors to quickly see:
 //  What course they are sailing today
@@ -106,16 +109,20 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // We keep a local "serverNow" that we advance between polls.
   // This avoids relying on the phone's clock.
   DateTime? serverNowUtc;
-  DateTime? sequenceStartUtc; // store once so countdown doesn’t reset
+  DateTime? sequenceStartUtc; // store once so countdown doesn't reset
+
+  // CHECK-IN STATE
+  // Tracks whether this competitor has confirmed they are racing today.
+  // Set to true after a successful POST /check-in or if GET /check-ins
+  // shows this boat already checked in. Displayed as a Chip in the boat info card.
+  bool isCheckedIn = false;
 
   // initState runs once when the widget is created
   // Here it is:
   //   - building today's date string
   //   - loading the current course
   //   - loading today's class results for this boat's class
-
-  bool isCheckedIn = false;
-
+  //   - prompting the check-in dialog (after the first frame renders)
   @override
   void initState() {
     super.initState();
@@ -128,57 +135,81 @@ class _UserBoatPageState extends State<UserBoatPage> {
     // Kick off the asynchronous loads
     _loadCurrentCourse();
     _loadClassResults();
-    _promptCheckIn();
 
     // Start listening for the live start sequence for this boat's class
     _startStartSequenceTimers();
+
+    // Prompt check-in dialog after the first frame has rendered.
+    // We use addPostFrameCallback because showDialog requires the widget
+    // tree to be fully built — calling it directly in initState would fail
+    // silently since the BuildContext is not yet ready for overlays.
+    // Reference: WidgetsBinding.instance.addPostFrameCallback [F14]
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _promptCheckIn();
+    });
   }
 
-Future<void> _promptCheckIn() async {
-  // First check if already checked in today
-  try {
-    final res = await dio.get("/check-ins", queryParameters: {"race_date": todayDate});
-    final List<dynamic> checkIns = res.data as List<dynamic>;
-    final alreadyIn = checkIns.any((c) => c["boat_id"] == widget.boat["id"]);
-    if (alreadyIn) {
-      setState(() => isCheckedIn = true);
-      return; // Already checked in, no dialog needed
-    }
-  } catch (_) {}
-
-  // Not checked in yet — show confirmation dialog
-  if (!mounted) return;
-  final confirmed = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => AlertDialog(
-      title: const Text("Racing today?"),
-      content: Text(
-        "Confirm you're racing today so the race officer knows you're on the water.",
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text("Not today"),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text("Yes, I'm racing"),
-        ),
-      ],
-    ),
-  );
-
-  if (confirmed == true) {
+  // CHECK-IN PROMPT
+  // Called once after the first frame renders. Steps:
+  //   1. Check GET /check-ins to see if this boat already checked in today.
+  //   2. If already checked in, set isCheckedIn = true and skip the dialog.
+  //   3. If not, show a confirmation dialog asking "Racing today?"
+  //   4. If confirmed, POST /check-in to record it in the database.
+  //   5. The race officer sees this on their page via GET /check-ins.
+  Future<void> _promptCheckIn() async {
+    // First check if already checked in today by querying the backend
     try {
-      await dio.post("/check-in", queryParameters: {
-        "boat_id": widget.boat["id"],
-        "race_date": todayDate,
-      });
-      setState(() => isCheckedIn = true);
-    } catch (_) {}
+      final res = await dio.get("/check-ins", queryParameters: {"race_date": todayDate});
+      final List<dynamic> checkIns = res.data as List<dynamic>;
+      // Look for this boat's id in the list of today's check-ins
+      final alreadyIn = checkIns.any((c) => c["boat_id"] == widget.boat["id"]);
+      if (alreadyIn) {
+        setState(() => isCheckedIn = true);
+        return; // Already checked in, no dialog needed
+      }
+    } catch (_) {
+      // If the endpoint fails (e.g. not deployed yet), fall through to show the dialog
+    }
+
+    // Not checked in yet — show confirmation dialog
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      // barrierDismissible: false forces the user to tap a button rather than
+      // tapping outside to dismiss — ensures they make a deliberate choice
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("Racing today?"),
+        content: const Text(
+          "Confirm you're racing today so the race officer knows you're on the water.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Not today"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Yes, I'm racing"),
+          ),
+        ],
+      ),
+    );
+
+    // If user tapped "Yes, I'm racing", send the check-in to the backend
+    if (confirmed == true) {
+      try {
+        await dio.post("/check-in", queryParameters: {
+          "boat_id": widget.boat["id"],
+          "race_date": todayDate,
+        });
+        setState(() => isCheckedIn = true);
+      } catch (_) {
+        // Silently fail — the check-in is a nice-to-have, not critical
+      }
+    }
   }
-}
+
   @override
   void dispose() {
     // Always cancel timers to avoid memory leaks when leaving the page
@@ -405,7 +436,7 @@ Future<void> _promptCheckIn() async {
     // Scaffold = main page layout structure (app bar and body)
     return Scaffold(
       appBar: AppBar(
-        // Title includes the boat’s sail number for clarity
+        // Title includes the boat's sail number for clarity
         title: Text("Your Boat: ${boat['sail_no']}"),
       ),
 
@@ -413,7 +444,7 @@ Future<void> _promptCheckIn() async {
       body: Padding(
         padding: const EdgeInsets.all(20),
 
-        // We use a ListView so content scrolls if it doesn’t fit on screen
+        // We use a ListView so content scrolls if it doesn't fit on screen
         child: ListView(
           children: [
             // Boat info card
@@ -428,9 +459,23 @@ Future<void> _promptCheckIn() async {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      "Boat Name: ${boat['name']}",
-                      style: const TextStyle(fontSize: 18),
+                    // Row with boat name and check-in status chip
+                    // The Chip gives the competitor visual confirmation that
+                    // their check-in was received by the backend.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Boat Name: ${boat['name']}",
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                        if (isCheckedIn)
+                          const Chip(
+                            label: Text("Checked in"),
+                            avatar: Icon(Icons.check_circle, size: 18, color: Colors.white),
+                            backgroundColor: Colors.green,
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text("Club: ${boat['club'] ?? ''}"),
@@ -486,7 +531,7 @@ Future<void> _promptCheckIn() async {
             // Class results table
 
             // Shows only results for this boat's class
-            // The user’s own boat is highlighted in bold in the table
+            // The user's own boat is highlighted in bold in the table
             loadingResults
                 // Spinner while results are being loaded
                 ? const Center(child: CircularProgressIndicator())
@@ -742,3 +787,6 @@ Future<void> _promptCheckIn() async {
 // Reference: UTC timezone handling for server sync [B10]
 // Reference: FastAPI query parameters for filtering [B11]
 // Reference: Scaffold structure for page layout [F3]
+// Reference: WidgetsBinding.addPostFrameCallback for post-build dialog [F14]
+// Reference: showDialog for check-in confirmation [F9]
+// Reference: Chip widget for check-in status display [F28]

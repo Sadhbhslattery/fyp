@@ -265,8 +265,16 @@ class RaceStart(Base):
 class CheckIn(Base):
     """
     Records that a competitor has confirmed they are racing today.
-    One row per boat per date — created when the competitor taps 'Yes' 
+    One row per boat per date — created when the competitor taps 'Yes'
     on the check-in dialog after logging in.
+
+    Fields:
+        id  Primary key
+        boat_id  FK to Boat — which boat checked in
+        race_date  Date of the race (YYYY-MM-DD)
+        checked_in_at Timestamp when the competitor confirmed
+
+    Reference: SQLAlchemy ORM declarative models [B4]
     """
     __tablename__ = "check_ins"
 

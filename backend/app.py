@@ -1175,20 +1175,41 @@ def delete_boat(boat_id: int, db: Session = Depends(get_db)):
     # HTTP 204 No Content — FastAPI sends no response body.
     # The Flutter admin page removes the boat from its local list on success.
 
-# Check-In 
-# ------
+# ── Check-In Endpoints ──
+# These support the competitor check-in feature.
+# Competitors confirm they are racing today via a dialog on UserBoatPage.
+# The race officer sees checked-in boats on RaceStartsPage via GET /check-ins.
+# Reference: FastAPI query parameter endpoints [B1]
+# Reference: SQLAlchemy ORM upsert pattern [B4]
+
 
 @app.post("/check-in")
 def check_in(boat_id: int, race_date: date, db: Session = Depends(get_db)):
     """
     POST /check-in?boat_id=X&race_date=YYYY-MM-DD
     Competitor confirms they are racing today.
-    Upsert pattern — safe to call multiple times.
+
+    Uses an upsert pattern — safe to call multiple times without creating
+    duplicate rows. If the boat has already checked in for this date,
+    returns a message without creating a new row.
+
+    Args:
+        boat_id: query parameter — which boat is checking in
+        race_date: query parameter — today's date
+        db: database session
+
+    Returns:
+        {"message": "Checked in", "boat_id": X} on success.
+        HTTP 404 if boat_id does not exist.
+
+    Reference: FastAPI POST endpoint with query parameters [B1]
+    Reference: SQLAlchemy ORM query, add, commit [B4]
     """
     boat = db.get(Boat, boat_id)
     if not boat:
         raise HTTPException(status_code=404, detail="Boat not found")
 
+    # Check if already checked in (upsert pattern — prevents duplicates)
     existing = (
         db.query(CheckIn)
         .filter(CheckIn.boat_id == boat_id, CheckIn.race_date == race_date)
@@ -1212,6 +1233,17 @@ def undo_check_in(boat_id: int, race_date: date, db: Session = Depends(get_db)):
     """
     DELETE /check-in?boat_id=X&race_date=YYYY-MM-DD
     Lets a competitor undo their check-in if they tapped by mistake.
+
+    Args:
+        boat_id: query parameter — which boat to un-check-in
+        race_date: query parameter — which date
+        db: database session
+
+    Returns:
+        {"deleted": N} where N is the number of rows removed (0 or 1).
+
+    Reference: FastAPI DELETE endpoint [B1]
+    Reference: SQLAlchemy ORM delete with filter [B4]
     """
     deleted = (
         db.query(CheckIn)
@@ -1226,7 +1258,21 @@ def undo_check_in(boat_id: int, race_date: date, db: Session = Depends(get_db)):
 def list_check_ins(race_date: date, db: Session = Depends(get_db)):
     """
     GET /check-ins?race_date=YYYY-MM-DD
-    Returns all checked-in boats for today — used by the race officer page.
+    Returns all checked-in boats for today.
+
+    Used by the race officer page (RaceStartsPage) to display which
+    competitors have confirmed they are racing, shown as Chip widgets
+    grouped by class.
+
+    Args:
+        race_date: query parameter — which date to check
+        db: database session
+
+    Returns:
+        List of dicts with boat_id, sail_no, name, class_name, checked_in_at.
+
+    Reference: FastAPI GET endpoint [B1]
+    Reference: SQLAlchemy JOIN query [B4]
     """
     rows = (
         db.query(CheckIn, Boat)
@@ -1244,7 +1290,6 @@ def list_check_ins(race_date: date, db: Session = Depends(get_db)):
         }
         for ci, boat in rows
     ]
-
 
 # Race Start / Finish — Input and Output Models
 
