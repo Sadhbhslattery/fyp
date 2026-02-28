@@ -2295,14 +2295,14 @@ def reset_race_day(
 ):
     """
     DELETE /race-day?race_date=YYYY-MM-DD&class_name=X
-    Delete RaceStart records for a given date.
+    Delete RaceStart and CheckIn records for a given date.
 
-    If class_name is provided, only RaceStart rows for that class are deleted.
-    Otherwise, ALL RaceStart rows for the date are deleted.
+    If class_name is provided, only RaceStart and CheckIn rows for that
+    class are deleted. Otherwise, ALL rows for the date are deleted.
 
-    Used by the 'Reset today's timings' button on the admin RaceStartsPage.
-    Allows the race officer to clear timing data if a mistake was made and
-    start the recording process again.
+    Used by the 'Reset Race Day' button on the admin RaceStartsPage.
+    Allows the race officer to clear all timing and check-in data if a
+    mistake was made or after a trial run, and start fresh.
 
     Args:
         race_date:  query parameter — the date to reset
@@ -2310,7 +2310,7 @@ def reset_race_day(
         db: database session
 
     Returns:
-        {"deleted": N} where N is the number of rows deleted.
+        {"deleted_starts": N, "deleted_checkins": M}
 
     Reference: FastAPI DELETE endpoint with query parameters [B1]
     Reference: SQLAlchemy ORM delete with filter (no joined delete) [B4]
@@ -2320,33 +2320,32 @@ def reset_race_day(
     # Local import ensures the correct Boat model is used here, avoiding any
     # potential name shadowing from imports earlier in the file.
 
-    # Base query: all RaceStart rows for the given date.
-    q = db.query(RaceStart).filter(RaceStart.race_date == race_date)
+    # Base queries: all RaceStart and CheckIn rows for the given date.
+    q_starts = db.query(RaceStart).filter(RaceStart.race_date == race_date)
+    q_checkins = db.query(CheckIn).filter(CheckIn.race_date == race_date)
 
     if class_name:
         # Filter to starts whose boat is in the given class.
         # Uses relationship-style condition (RaceStart.boat.has(...)) rather
         # than an explicit JOIN because SQLAlchemy does not allow .delete() on
         # queries that use .join() or .outerjoin().
-        q = q.filter(RaceStart.boat.has(BoatModel.class_name == class_name))
+        q_starts = q_starts.filter(RaceStart.boat.has(BoatModel.class_name == class_name))
+        q_checkins = q_checkins.filter(CheckIn.boat.has(BoatModel.class_name == class_name))
         # .has() generates a correlated subquery compatible with bulk .delete().
         # Reference: SQLAlchemy ORM relationship has() condition [B11]
         # Reference: SQLAlchemy ORM delete restriction on joined queries [B12]
 
-    # Perform bulk delete without join (SQLAlchemy restriction).
-    deleted = q.delete(synchronize_session=False)
+    # Perform bulk deletes without join (SQLAlchemy restriction).
+    deleted_starts = q_starts.delete(synchronize_session=False)
+    deleted_checkins = q_checkins.delete(synchronize_session=False)
     # synchronize_session=False means SQLAlchemy does not update the in-memory
     # session state for deleted rows — more efficient for bulk deletes.
     # Reference: SQLAlchemy ORM Delete Rules [B12]
-    # (Cannot call delete() on queries that use join()/outerjoin().)
 
     db.commit()
     # Commit the DELETE transaction.
 
-    return {"deleted": deleted}
-    # Returns the count of deleted rows so Flutter can confirm the reset.
-
-# Reference: SQLAlchemy ORM delete with filter (no joined delete) [B4]
+    return {"deleted_starts": deleted_starts, "deleted_checkins": deleted_checkins}
 
 # Reference: FastAPI application initialization [B1]
 # Reference: CORS middleware configuration [B13]

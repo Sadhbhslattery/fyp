@@ -611,17 +611,68 @@ Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
 
   // UI
 
+// Reset Race Day
+  // Calls DELETE /race-day to clear all timing data and check-ins for today.
+  // Shows a confirmation dialog first to prevent accidental data loss.
+  Future<void> _resetRaceDay() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Reset race day?"),
+        content: const Text(
+          "This will delete ALL start times, finish times, and check-ins for today. This cannot be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Reset"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await dio.delete("/race-day", queryParameters: {"race_date": todayDate});
+      await _loadData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Race day reset — all times and check-ins cleared.")),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to reset race day.")),
+        );
+      }
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text("Race Officer — $todayDate"),
         actions: [
-          // Refresh button
+          // Refresh button — reloads data without deleting anything
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
             tooltip: "Refresh",
+          ),
+          // Reset button — clears all timing and check-in data for today
+          // Uses a red warning icon to distinguish it from a simple refresh
+          IconButton(
+            icon: const Icon(Icons.delete_forever, color: Colors.red),
+            onPressed: _resetRaceDay,
+            tooltip: "Reset Race Day",
           ),
         ],
       ),
