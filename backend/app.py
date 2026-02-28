@@ -97,7 +97,7 @@ from db import Base, engine, SessionLocal
 # Reference: SQLAlchemy engine and session factory [B4]
 # Reference: FastAPI SQL database tutorial [B2]
 
-from models.base import Race, Event, Boat, RaceStart, RaceDaySettings
+from models.base import Race, Event, Boat, RaceStart, RaceDaySettings, Entry
 # Imports the ORM model classes defined in models/base.py.
 # Each class maps to a MySQL table and is used to query and modify data.
 # Race  – the races table (not heavily used in this iteration)
@@ -1158,11 +1158,17 @@ def delete_boat(boat_id: int, db: Session = Depends(get_db)):
     boat = db.get(Boat, boat_id)
     if not boat:
         raise HTTPException(status_code=404, detail="Boat not found")
+    
+    # Delete child rows that reference this boat to satisfy foreign key constraints.
+    # MySQL will reject deleting a boat if any rows in these tables still point to it.
+    db.query(Entry).filter(Entry.boat_id == boat_id).delete()
+    # Remove any race entries linking this boat to races.
+    db.query(RaceStart).filter(RaceStart.boat_id == boat_id).delete()
+    # Remove any timing records (starts, finishes, results) for this boat.
 
     db.delete(boat)
-    # Stage the Boat row for deletion.
+    # Now safe to delete the Boat row itself — no child rows reference it.
     db.commit()
-    # Execute the DELETE and commit the transaction.
     return None
     # HTTP 204 No Content — FastAPI sends no response body.
     # The Flutter admin page removes the boat from its local list on success.
