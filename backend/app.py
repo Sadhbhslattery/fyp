@@ -97,7 +97,7 @@ from db import Base, engine, SessionLocal
 # Reference: SQLAlchemy engine and session factory [B4]
 # Reference: FastAPI SQL database tutorial [B2]
 
-from models.base import Race, Event, Boat, RaceStart, RaceDaySettings, Entry
+from models.base import Race, Event, Boat, RaceStart, RaceDaySettings, Entry, CheckIn
 # Imports the ORM model classes defined in models/base.py.
 # Each class maps to a MySQL table and is used to query and modify data.
 # Race  – the races table (not heavily used in this iteration)
@@ -1165,6 +1165,8 @@ def delete_boat(boat_id: int, db: Session = Depends(get_db)):
     # Remove any race entries linking this boat to races.
     db.query(RaceStart).filter(RaceStart.boat_id == boat_id).delete()
     # Remove any timing records (starts, finishes, results) for this boat.
+    db.query(CheckIn).filter(CheckIn.boat_id == boat_id).delete()
+    # Removes Check In
 
     db.delete(boat)
     # Now safe to delete the Boat row itself — no child rows reference it.
@@ -1173,6 +1175,75 @@ def delete_boat(boat_id: int, db: Session = Depends(get_db)):
     # HTTP 204 No Content — FastAPI sends no response body.
     # The Flutter admin page removes the boat from its local list on success.
 
+# Check-In 
+# ------
+
+@app.post("/check-in")
+def check_in(boat_id: int, race_date: date, db: Session = Depends(get_db)):
+    """
+    POST /check-in?boat_id=X&race_date=YYYY-MM-DD
+    Competitor confirms they are racing today.
+    Upsert pattern — safe to call multiple times.
+    """
+    boat = db.get(Boat, boat_id)
+    if not boat:
+        raise HTTPException(status_code=404, detail="Boat not found")
+
+    existing = (
+        db.query(CheckIn)
+        .filter(CheckIn.boat_id == boat_id, CheckIn.race_date == race_date)
+        .first()
+    )
+    if existing:
+        return {"message": "Already checked in", "boat_id": boat_id}
+
+    ci = CheckIn(
+        boat_id=boat_id,
+        race_date=race_date,
+        checked_in_at=datetime.now(),
+    )
+    db.add(ci)
+    db.commit()
+    return {"message": "Checked in", "boat_id": boat_id}
+
+
+@app.delete("/check-in")
+def undo_check_in(boat_id: int, race_date: date, db: Session = Depends(get_db)):
+    """
+    DELETE /check-in?boat_id=X&race_date=YYYY-MM-DD
+    Lets a competitor undo their check-in if they tapped by mistake.
+    """
+    deleted = (
+        db.query(CheckIn)
+        .filter(CheckIn.boat_id == boat_id, CheckIn.race_date == race_date)
+        .delete()
+    )
+    db.commit()
+    return {"deleted": deleted}
+
+
+@app.get("/check-ins")
+def list_check_ins(race_date: date, db: Session = Depends(get_db)):
+    """
+    GET /check-ins?race_date=YYYY-MM-DD
+    Returns all checked-in boats for today — used by the race officer page.
+    """
+    rows = (
+        db.query(CheckIn, Boat)
+        .join(Boat, CheckIn.boat_id == Boat.id)
+        .filter(CheckIn.race_date == race_date)
+        .all()
+    )
+    return [
+        {
+            "boat_id": boat.id,
+            "sail_no": boat.sail_no,
+            "name": boat.name,
+            "class_name": boat.class_name,
+            "checked_in_at": ci.checked_in_at.isoformat(),
+        }
+        for ci, boat in rows
+    ]
 
 
 # Race Start / Finish — Input and Output Models

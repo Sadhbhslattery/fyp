@@ -6,17 +6,20 @@
 // View a live countdown and preparatory flag (read from DB via GET /start-sequence/status)
 // See boats currently racing and finished, grouped by class (boats and race-start rows joined in UI)
 // Record finishes (writes finish_time and options to DB via POST /race-finish)
+// See which competitors have checked in for today's race (read from DB via GET /check-ins)
 // Refresh data manually (Refresh button) or by pull-to-refresh
 
 // DATABASE IN PLAIN ENGLISH
 // This page joins two tables in the UI:
 // boats table: Permanent boat details (id, sail_no, name, class_name)
 // race_starts table: Per-boat, per-day timing (race_date, start_time, finish_time, elapsed_seconds)
+// check_ins table: Per-boat, per-day confirmation that the competitor is racing today
 // The page:
 // 1. GET /boats - loads all boats
 // 2. GET /race-starts?race_date=... - loads today's timing rows
-// 3. Creates map: startsByBoatId[boat_id] = timing_record
-// 4. UI determines state by checking timing record:
+// 3. GET /check-ins?race_date=... - loads today's check-in confirmations
+// 4. Creates map: startsByBoatId[boat_id] = timing_record
+// 5. UI determines state by checking timing record:
 // Not started: start_time is in future or null
 // In progress: now >= start_time AND finish_time == null
 // Finished: finish_time != null
@@ -28,7 +31,7 @@
 // Shows preparatory flag until 1-minute mark
 // Displays MM:SS countdown
 
-// _loadData(): GET /boats and GET /race-starts, builds startsByBoatId map
+// _loadData(): GET /boats, GET /race-starts, and GET /check-ins, builds startsByBoatId map
 // _parseStartDateTimeUtc(): Converts "HH:MM:SS" string to DateTime for comparisons
 // _hasStarted(boat): Returns true if now >= scheduled start time
 // _hasFinished(boat): Returns true if finish_time != null
@@ -36,6 +39,7 @@
 // _setClassStart(className): Dialog for time input, POST /race-starts/class-start
 // _fireFiveMinuteGun(className): Calls StartSequenceApi.start()
 // _finishBoatWithOptions(boat): Bottom sheet with OCS toggle and penalty input, POST /race-finish
+// _checkedInForClass(className): Returns list of check-in records for a given class
 
 
 import 'dart:async';
@@ -59,6 +63,10 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
 
   List<dynamic> boats = [];
   Map<int, Map<String, dynamic>> startsByBoatId = {};
+
+  // Holds today's check-in records fetched from GET /check-ins?race_date=...
+  // Each entry contains: boat_id, sail_no, name, class_name, checked_in_at
+  List<Map<String, dynamic>> checkIns = [];
 
   bool loading = true;
   String? error;
@@ -94,7 +102,7 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   }
 
 
-  // Load Data (boats and race-start rows)
+  // Load Data (boats, race-start rows, and check-ins)
 
   Future<void> _loadData() async {
     setState(() {
@@ -116,6 +124,16 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
       startsByBoatId = {
         for (final s in list) (s["boat_id"] as int): Map<String, dynamic>.from(s as Map)
       };
+
+      // Load today's check-ins from the backend
+      // Each check-in record contains boat_id, sail_no, name, class_name, checked_in_at
+      final checkInsRes = await dio.get(
+        "/check-ins",
+        queryParameters: {"race_date": todayDate},
+      );
+      checkIns = (checkInsRes.data as List<dynamic>)
+          .map((c) => Map<String, dynamic>.from(c as Map))
+          .toList();
 
       // Pick a default class to show in the countdown card
       if (selectedSequenceClass == null && classNames.isNotEmpty) {
@@ -146,6 +164,15 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     }
     final list = set.toList()..sort();
     return list;
+  }
+
+
+  // Check-In Helpers
+
+  // Returns the list of check-in records for a given class name
+  // Used to display checked-in boats as chips in the race officer UI
+  List<Map<String, dynamic>> _checkedInForClass(String className) {
+    return checkIns.where((c) => c["class_name"] == className).toList();
   }
 
 
@@ -645,10 +672,38 @@ Future<void> _finishBoatWithOptions(Map<String, dynamic> boat) async {
                             className,
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          subtitle: Text(_classStartTimeLabel(className)),
+                          // Subtitle now shows the check-in count alongside the start time
+                          // so the race officer can see at a glance how many boats have confirmed
+                          subtitle: Text(
+                            "${_checkedInForClass(className).length} checked in  •  ${_classStartTimeLabel(className)}",
+                          ),
                           childrenPadding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                           children: [
+                            // Checked-in boats section
+                            // Displays compact Chip widgets for each competitor who has
+                            // confirmed they are racing today via the check-in dialog.
+                            // This lets the race officer see who is on the water before
+                            // the start sequence begins.
                             const SizedBox(height: 8),
+                            const Text("Checked in", style: TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 6),
+
+                            if (_checkedInForClass(className).isEmpty)
+                              const Text("No boats checked in yet.")
+                            else
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: _checkedInForClass(className).map((c) {
+                                  return Chip(
+                                    avatar: const Icon(Icons.check_circle, size: 18),
+                                    label: Text("${c["sail_no"]} — ${c["name"]}"),
+                                  );
+                                }).toList(),
+                              ),
+
+                            const SizedBox(height: 12),
+
                             const Text("In progress", style: TextStyle(fontWeight: FontWeight.w600)),
                             const SizedBox(height: 6),
 
@@ -716,9 +771,10 @@ class StartSequenceStatusDto {
 // The race officer control panel that:
 // 1. Manages start times at class level
 // 2. Shows live countdown synchronized with backend
-// 3. Groups boats by state (in progress / finished)
+// 3. Groups boats by state (checked in / in progress / finished)
 // 4. Records finishes with OCS/penalty options
 // 5. Provides both manual refresh and pull-to-refresh
+// 6. Displays check-in confirmations from competitors as compact chips
 
 // This is the heart of the race timing system.
 
@@ -738,3 +794,4 @@ class StartSequenceStatusDto {
 // Reference: Query parameters for date filtering [B11]
 // Reference: SnackBar for feedback [F7]
 // Reference: Card for countdown display [F19]
+// Reference: Chip widget for compact check-in display [F28]

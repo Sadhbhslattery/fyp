@@ -108,12 +108,14 @@ class _UserBoatPageState extends State<UserBoatPage> {
   DateTime? serverNowUtc;
   DateTime? sequenceStartUtc; // store once so countdown doesn’t reset
 
-
   // initState runs once when the widget is created
   // Here it is:
   //   - building today's date string
   //   - loading the current course
   //   - loading today's class results for this boat's class
+
+  bool isCheckedIn = false;
+
   @override
   void initState() {
     super.initState();
@@ -126,11 +128,57 @@ class _UserBoatPageState extends State<UserBoatPage> {
     // Kick off the asynchronous loads
     _loadCurrentCourse();
     _loadClassResults();
+    _promptCheckIn();
 
     // Start listening for the live start sequence for this boat's class
     _startStartSequenceTimers();
   }
 
+Future<void> _promptCheckIn() async {
+  // First check if already checked in today
+  try {
+    final res = await dio.get("/check-ins", queryParameters: {"race_date": todayDate});
+    final List<dynamic> checkIns = res.data as List<dynamic>;
+    final alreadyIn = checkIns.any((c) => c["boat_id"] == widget.boat["id"]);
+    if (alreadyIn) {
+      setState(() => isCheckedIn = true);
+      return; // Already checked in, no dialog needed
+    }
+  } catch (_) {}
+
+  // Not checked in yet — show confirmation dialog
+  if (!mounted) return;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      title: const Text("Racing today?"),
+      content: Text(
+        "Confirm you're racing today so the race officer knows you're on the water.",
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Not today"),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text("Yes, I'm racing"),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed == true) {
+    try {
+      await dio.post("/check-in", queryParameters: {
+        "boat_id": widget.boat["id"],
+        "race_date": todayDate,
+      });
+      setState(() => isCheckedIn = true);
+    } catch (_) {}
+  }
+}
   @override
   void dispose() {
     // Always cancel timers to avoid memory leaks when leaving the page
@@ -142,12 +190,12 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // Start squence poll and tick 
 
   // Starts:
-  //  - polling the backend every 2 seconds for the current sequence state
+  //  - polling the backend every 10 seconds for the current sequence state
   //  - ticking locally every second to update the countdown smoothly
   void _startStartSequenceTimers() {
     // Poll backend for accuracy (e.g., RO restarts or changes prep flag)
     pollTimer = Timer.periodic(
-      const Duration(seconds: 2),
+      const Duration(seconds: 10),
       (_) => _loadStartSequence(),
     );
 
