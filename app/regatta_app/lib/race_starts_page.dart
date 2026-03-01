@@ -137,12 +137,6 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
           .map((c) => Map<String, dynamic>.from(c as Map))
           .toList();
 
-      // Pick a default class to show in the countdown card
-      if (selectedSequenceClass == null && classNames.isNotEmpty) {
-        selectedSequenceClass = classNames.first;
-        _startSequenceTimers();
-      }
-
       setState(() {});
     } catch (e) {
       setState(() {
@@ -310,10 +304,9 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
         raceDate: todayDate,
         prepFlag: "P",
       );
-
-      // show the countdown card for that class immediately
+      // countdown starts when the admin actually fires the gun
       setState(() => selectedSequenceClass = className);
-      await _loadStartSequence();
+      _startSequenceTimers();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
