@@ -1928,7 +1928,7 @@ def race_results_for_class(
 
         # If corrected time is present and no OCS, assign position; else leave as None.
         pos = (position_counter if (corr is not None and not has_code) else None)
-        if corr is not None and not has_ocs:
+        if corr is not None and not has_code:
             position_counter += 1
             # Increment only for placed boats.
 
