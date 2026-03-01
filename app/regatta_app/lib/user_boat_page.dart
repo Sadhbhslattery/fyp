@@ -231,7 +231,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     );
 
     // Local tick keeps countdown smooth between polls
-    tickTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (sequenceStartUtc != null) {
         if (mounted) setState(() {}); // UI rebuild only, countdown runs off DateTime.now()
       }
