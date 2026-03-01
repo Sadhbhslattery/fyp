@@ -737,6 +737,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
                   DataColumn(label: Text("Boat")),
                   DataColumn(label: Text("Elapsed")),
                   DataColumn(label: Text("Corrected")),
+                  DataColumn(label: Text("Code")),
                 ], // Reference: Flutter DataTable Docs [F6]
 
                 // Build one row per boat result
@@ -765,6 +766,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
                       DataCell(Text(row["name"] as String, style: style)),
                       DataCell(Text(_formatDuration(elapsed), style: style)),
                       DataCell(Text(_formatDuration(corrected), style: style)),
+                      DataCell(Text((r["result_code"] as String?) ?? (r["code"] as String?) ?? "")),
                     ],
                   );
                 }).toList(),
