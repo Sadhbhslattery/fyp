@@ -87,6 +87,16 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   Timer? tickTimer;
   DateTime? serverNowUtc;
 
+  // ── Auto-fire tracking ──
+  // Keeps track of which classes have already had their 5-minute gun fired
+  // (either manually by tapping "5-min" or automatically by the auto-fire timer).
+  // Prevents the same class from being fired twice.
+  final Set<String> _autoFiredClasses = {};
+
+  // Timer that checks every second whether any class is 5 minutes away from
+  // its scheduled start time. If so, it automatically fires the 5-minute gun.
+  Timer? _autoFireTimer;
+
   @override
   void initState() {
     super.initState();
@@ -100,11 +110,12 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   void dispose() {
     pollTimer?.cancel();
     tickTimer?.cancel();
+    _autoFireTimer?.cancel();
     super.dispose();
   }
 
 
-  // Load Data (boats, race-start rows, and check-ins)
+  // Load Data (boats, race-start rows and check-ins)
 
   Future<void> _loadData() async {
     setState(() {
@@ -136,6 +147,10 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
       checkIns = (checkInsRes.data as List<dynamic>)
           .map((c) => Map<String, dynamic>.from(c as Map))
           .toList();
+
+      // Start the auto-fire timer now that we know each class's start time.
+      // Safe to call repeatedly — it cancels the previous timer first.
+      _startAutoFireTimer();
 
       setState(() {});
     } catch (e) {
@@ -293,11 +308,90 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     }
   }
 
+  // ── Auto-Fire Logic ──
+  //
+  // Called once after data loads. Starts a 1-second timer that checks
+  // each class's scheduled start time. If the current time is within
+  // 5 minutes of the start (i.e. now >= startTime - 5min), and the
+  // class hasn't been fired yet, it automatically triggers the
+  // 5-minute gun — exactly as if the admin tapped "5-min" manually.
+  //
+  // IMPORTANT: Only auto-fires within a 30-second window of the exact
+  // 5-minute mark. This prevents misfiring when the admin sets a start
+  // time that's already less than 5 minutes away — in that case the
+  // admin should manually tap "5-min" instead.
+  //
+  // Example: If White Sail 1 is set to start at 18:30:
+  //   - fiveMinBefore = 18:25:00
+  //   - At 18:24:59 → not yet, skip
+  //   - At 18:25:00 → 0 seconds past trigger, FIRE ✓
+  //   - At 18:25:29 → 29 seconds past trigger, FIRE ✓ (catches slight delays)
+  //   - At 18:25:31 → 31 seconds past trigger, too late, skip (admin must tap "5-min")
+  //
+  // The competitor page picks up the countdown automatically because
+  // it polls GET /start-sequence/status every 10 seconds.
+
+  void _startAutoFireTimer() {
+    _autoFireTimer?.cancel();
+
+    _autoFireTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final nowUtc = DateTime.now().toUtc();
+
+      for (final className in classNames) {
+        // Skip if already fired (manually or automatically)
+        if (_autoFiredClasses.contains(className)) continue;
+
+        // Find the scheduled start time for this class
+        // (all boats in a class share the same start time)
+        DateTime? classStartUtc;
+        for (final b in boats) {
+          final boat = Map<String, dynamic>.from(b as Map);
+          if (boat["class_name"] == className) {
+            classStartUtc = _scheduledStartUtcForBoat(boat);
+            break;
+          }
+        }
+
+        // No start time set yet — skip this class
+        if (classStartUtc == null) continue;
+
+        // Calculate when the 5-minute gun should fire
+        // (exactly 5 minutes before the scheduled start)
+        final fiveMinBefore = classStartUtc.subtract(const Duration(minutes: 5));
+
+        // How many seconds past the 5-minute trigger point are we?
+        // Only auto-fire within a 30-second window of the exact moment.
+        // This prevents misfiring when the admin sets a start time that's
+        // already less than 5 minutes away — in that case the admin
+        // should manually tap "5-min" instead.
+        //
+        // Example: start = 18:30, fiveMinBefore = 18:25
+        //   At 18:24:59 → not yet, skip
+        //   At 18:25:00 → 0 seconds past, FIRE
+        //   At 18:25:29 → 29 seconds past, FIRE (catches slight delays)
+        //   At 18:25:31 → 31 seconds past, too late, skip (admin must manually fire)
+        final secondsPastTrigger = nowUtc.difference(fiveMinBefore).inSeconds;
+        if (secondsPastTrigger >= 0 && secondsPastTrigger <= 30) {
+          // Mark as fired BEFORE the async call to prevent double-firing
+          _autoFiredClasses.add(className);
+
+          // Fire the 5-minute gun (same as tapping "5-min" button)
+          _fireFiveMinuteGun(className);
+
+          debugPrint("Auto-fired 5-min gun for $className at ${nowUtc.toIso8601String()}");
+        }
+      }
+    });
+  }
+
 
   // Admin Actions
 
 
   Future<void> _fireFiveMinuteGun(String className) async {
+    // Mark this class as fired so the auto-fire timer skips it
+    _autoFiredClasses.add(className);
+
     try {
       await startSeqApi.start(
         className: className,
@@ -631,6 +725,9 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
       await dio.delete("/race-day", queryParameters: {"race_date": todayDate});
       await _loadData();
 
+      // Clear auto-fire tracking so classes can be re-fired after a reset
+      _autoFiredClasses.clear();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Race day reset — all times and check-ins cleared.")),
@@ -844,6 +941,8 @@ class StartSequenceStatusDto {
 // 5. Provides both manual refresh and pull-to-refresh
 // 6. Displays check-in confirmations from competitors as compact chips
 // 7. Reset Race Day button (red trash icon) clears all timing and check-in data with confirmation
+// 8. Auto-fires the 5-minute gun when a class is exactly 5 minutes from its scheduled start
+//    (within a 30-second window to prevent misfires from late-set start times)
 
 // This is the heart of the race timing system.
 
