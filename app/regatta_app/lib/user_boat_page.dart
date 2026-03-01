@@ -231,7 +231,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     );
 
     // Local tick keeps countdown smooth between polls
-    tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    tickTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (sequenceStartUtc != null) {
         if (mounted) setState(() {}); // UI rebuild only, countdown runs off DateTime.now()
       }
@@ -338,14 +338,31 @@ class _UserBoatPageState extends State<UserBoatPage> {
         raceDate: todayDate,
       );
 
+      // Check if this sequence is still active (countdown > 0)
+      // If the race already started, discard the stale sequence so the
+      // countdown card doesn't show "STARTED" from a previous run.
+      final startStr = res["sequence_start_utc"] as String;
+      final seqStart = DateTime.parse(startStr).toUtc();
+      final startMoment = seqStart.add(const Duration(minutes: 5));
+      final remaining = startMoment.difference(DateTime.now().toUtc());
+
+      if (remaining.inSeconds <= 0) {
+        // Sequence is finished — treat as no active sequence
+        setState(() {
+          startSequence = null;
+          sequenceStartUtc = null;
+          startSequenceError = null;
+        });
+        return;
+      }
+
       setState(() {
         startSequence = res;
 
         // Only set sequenceStartUtc the first time (prevents resetting every poll)
         if (sequenceStartUtc == null) {
-          final startStr = res["sequence_start_utc"] as String;
-          sequenceStartUtc = DateTime.parse(startStr).toUtc();
-      }
+          sequenceStartUtc = seqStart;
+        }
       });
     } catch (e) {
       // If no sequence exists yet, users should see a friendly waiting message
@@ -549,17 +566,11 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // - countdown to the start for this boat's class
   // - current phase label (5 / 4 / 1 / STARTED)
   Widget _buildStartSequenceCard() {
-    // If there is no active start sequence, show a friendly message
+    // If there is no active start sequence, don't show anything.
+    // We purposely return an empty widget instead of a "waiting" message
+    // so the user page isn't cluttered before the race officer acts.
     if (startSequence == null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            startSequenceError ?? "Start sequence not started yet for your class.",
-            style: const TextStyle(color: Colors.white),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     final s = startSequence!;
@@ -568,14 +579,19 @@ class _UserBoatPageState extends State<UserBoatPage> {
     final seqStartUtc =
         DateTime.parse(s["sequence_start_utc"] as String).toUtc();
 
-    // Use serverNowUtc (advanced locally) to avoid phone clock drift
     final nowUtc = DateTime.now().toUtc();
-        DateTime.parse(s["server_time_utc"] as String).toUtc();
 
     // The RO pressed "5-minute gun" at sequence_start_utc
     // The actual START happens 5 minutes after that moment.
     final startMomentUtc = seqStartUtc.add(const Duration(minutes: 5));
     final timeToStart = startMomentUtc.difference(nowUtc);
+
+    // If the countdown has finished (race already started), hide the card.
+    // This prevents showing a stale "STARTED" banner from a previous sequence
+    // or from a completed countdown that's no longer useful to the sailor.
+    if (timeToStart.inSeconds <= 0) {
+      return const SizedBox.shrink();
+    }
 
 
     return Card(
@@ -737,7 +753,6 @@ class _UserBoatPageState extends State<UserBoatPage> {
                   DataColumn(label: Text("Boat")),
                   DataColumn(label: Text("Elapsed")),
                   DataColumn(label: Text("Corrected")),
-                  DataColumn(label: Text("Code")),
                 ], // Reference: Flutter DataTable Docs [F6]
 
                 // Build one row per boat result
@@ -766,7 +781,6 @@ class _UserBoatPageState extends State<UserBoatPage> {
                       DataCell(Text(row["name"] as String, style: style)),
                       DataCell(Text(_formatDuration(elapsed), style: style)),
                       DataCell(Text(_formatDuration(corrected), style: style)),
-                      DataCell(Text((r["result_code"] as String?) ?? (r["code"] as String?) ?? "")),
                     ],
                   );
                 }).toList(),

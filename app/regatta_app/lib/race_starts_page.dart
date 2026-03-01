@@ -152,6 +152,12 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
       // Safe to call repeatedly — it cancels the previous timer first.
       _startAutoFireTimer();
 
+      // If we don't already have a sequence selected (e.g. page was re-entered),
+      // probe the backend for any active countdown so we can restore it.
+      if (selectedSequenceClass == null) {
+        await _restoreActiveSequence();
+      }
+
       setState(() {});
     } catch (e) {
       setState(() {
@@ -260,6 +266,44 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
 
   List<Map<String, dynamic>> _finishedForClass(String className) =>
       _boatsForClass(className).where(_hasFinished).toList();
+
+
+  // ── Restore Active Sequence on Page Load ──
+  //
+  // When the admin navigates away and comes back, the in-memory state
+  // (selectedSequenceClass, startSequence, timers) is lost because
+  // initState creates a fresh widget. This method probes the backend
+  // for each class to see if a countdown is still active (time remaining > 0).
+  // If found, it restores the countdown card so the admin doesn't lose
+  // visibility of a running sequence.
+  Future<void> _restoreActiveSequence() async {
+    for (final className in classNames) {
+      try {
+        final res = await startSeqApi.getStatus(
+          className: className,
+          raceDate: todayDate,
+        );
+
+        // Check if this sequence still has time remaining
+        final dto = StartSequenceStatusDto.fromMap(res);
+        final startMoment = dto.sequenceStartUtc.add(const Duration(minutes: 5));
+        final remaining = startMoment.difference(DateTime.now().toUtc());
+
+        if (remaining.inSeconds > 0) {
+          // Found an active sequence — restore it
+          setState(() {
+            selectedSequenceClass = className;
+            _autoFiredClasses.add(className); // don't re-fire
+          });
+          _startSequenceTimers();
+          debugPrint("Restored active sequence for $className (${remaining.inSeconds}s remaining)");
+          return; // only restore the first active one
+        }
+      } catch (_) {
+        // No sequence for this class — try next
+      }
+    }
+  }
 
 
   // Start Sequence Timers
@@ -727,6 +771,17 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
 
       // Clear auto-fire tracking so classes can be re-fired after a reset
       _autoFiredClasses.clear();
+
+      // Clear the active countdown card — the sequence records may have
+      // been deleted by the backend along with other race-day data.
+      setState(() {
+        selectedSequenceClass = null;
+        startSequence = null;
+        serverNowUtc = null;
+        startSequenceError = null;
+      });
+      pollTimer?.cancel();
+      tickTimer?.cancel();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
