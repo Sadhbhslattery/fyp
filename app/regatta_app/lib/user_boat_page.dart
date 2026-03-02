@@ -245,9 +245,14 @@ class _UserBoatPageState extends State<UserBoatPage> {
   //  - ticking locally every second to update the countdown and elapsed timer smoothly
   void _startStartSequenceTimers() {
     // Poll backend for accuracy (e.g., RO restarts or changes prep flag)
+    // Also re-fetches the boat's start record so the scheduled time updates
+    // when the admin sets per-class start times after the page is already open.
     pollTimer = Timer.periodic(
       const Duration(seconds: 10),
-      (_) => _loadStartSequence(),
+      (_) {
+        _loadStartSequence();
+        _loadBoatStart();
+      },
     );
 
     // Local tick keeps countdown and elapsed timer smooth between polls
@@ -823,7 +828,13 @@ class _UserBoatPageState extends State<UserBoatPage> {
             // Basic course metadata
             Text("Course: ${course['name']}"),
             Text("Wind: ${course['wind']}"),
-            Text("Start time: $startTime"),
+            // Show the per-class start time if the admin has set one,
+            // otherwise show the general course start time labelled as "First start"
+            // so the competitor isn't confused by two different times on the page.
+            if (boatStart != null && boatStart!["start_time"] != null)
+              Text("Your start: ${(boatStart!["start_time"] as String).substring(0, 5)}")
+            else
+              Text("First start: $startTime"),
 
             const SizedBox(height: 10),
 
