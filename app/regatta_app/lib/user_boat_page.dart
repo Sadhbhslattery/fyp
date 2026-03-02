@@ -628,7 +628,28 @@ class _UserBoatPageState extends State<UserBoatPage> {
 
       // ── STATE 3: Race has started — show elapsed timer ──
       if (timeToStart.inSeconds <= 0) {
-        final elapsed = nowUtc.difference(startMomentUtc);
+
+        // Check if this boat has been finished by the admin.
+        // If so, show the recorded elapsed_seconds as a fixed time.
+        // If not, show a live ticking timer.
+        final bool boatFinished = boatStart != null && boatStart!["finish_time"] != null;
+        final Duration elapsed;
+        final String title;
+        final String subtitle;
+
+        if (boatFinished) {
+          // Boat has been finished — show fixed elapsed time from the database
+          final recordedSeconds = boatStart!["elapsed_seconds"] as int? ?? 0;
+          elapsed = Duration(seconds: recordedSeconds);
+          title = "Finished \u2014 ${widget.boat["class_name"]}";
+          subtitle = "Your finish time";
+        } else {
+          // Boat still racing — show live ticking elapsed time
+          elapsed = nowUtc.difference(startMomentUtc);
+          title = "Racing \u2014 ${widget.boat["class_name"]}";
+          subtitle = "Time racing";
+        }
+
         return Card(
           color: AppTheme.primary,
           child: Padding(
@@ -637,7 +658,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Racing \u2014 ${widget.boat["class_name"]}",
+                  title,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -645,7 +666,8 @@ class _UserBoatPageState extends State<UserBoatPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Large elapsed time HH:MM:SS ticking up every second
+                // Large elapsed time HH:MM:SS
+                // Ticks every second while racing; freezes when finished
                 Center(
                   child: Text(
                     _formatElapsed(elapsed),
@@ -657,10 +679,10 @@ class _UserBoatPageState extends State<UserBoatPage> {
                 ),
                 const SizedBox(height: 6),
 
-                const Center(
+                Center(
                   child: Text(
-                    "Time racing",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    subtitle,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
