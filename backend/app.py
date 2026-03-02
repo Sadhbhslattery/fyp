@@ -156,6 +156,9 @@ from auth import hash_password, verify_password
 # Reference: bcrypt algorithm design [B16]
 # Reference: auth.py (this project)
 
+# -------------------
+from models.start_sequence import StartSequence
+# ------------------REF
 # Application Setup
 
 app = FastAPI()
@@ -2330,6 +2333,7 @@ def reset_race_day(
     # Base queries: all RaceStart and CheckIn rows for the given date.
     q_starts = db.query(RaceStart).filter(RaceStart.race_date == race_date)
     q_checkins = db.query(CheckIn).filter(CheckIn.race_date == race_date)
+    q_sequences = db.query(StartSequence).filter(StartSequence.race_date == race_date)
 
     if class_name:
         # Filter to starts whose boat is in the given class.
@@ -2345,6 +2349,7 @@ def reset_race_day(
     # Perform bulk deletes without join (SQLAlchemy restriction).
     deleted_starts = q_starts.delete(synchronize_session=False)
     deleted_checkins = q_checkins.delete(synchronize_session=False)
+    deleted_sequences = q_sequences.delete()
     # synchronize_session=False means SQLAlchemy does not update the in-memory
     # session state for deleted rows — more efficient for bulk deletes.
     # Reference: SQLAlchemy ORM Delete Rules [B12]

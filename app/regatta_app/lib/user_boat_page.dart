@@ -11,16 +11,20 @@
 //  GET /race-results   - per-class results (elapsed and corrected times)
 //  GET /check-ins      - whether this boat has already checked in today
 //  POST /check-in      - confirm this boat is racing today
+//  GET /race-starts/boat - this boat's scheduled start time for today
 
 // This allows sailors to quickly see:
 //  What course they are sailing today
+//  Their scheduled start time before the gun fires
+//  The live countdown during the start sequence
+//  How long they have been racing since the start
 //  How they performed relative to other boats in their class
 
 import 'package:flutter/material.dart'; // Flutter widgets and layout
 import 'package:dio/dio.dart';
 import 'package:regatta_app/theme/app_theme.dart'; // HTTP client for calling the backend
 
-// Start sequence (5–4–1–Start) UI
+// Start sequence (5-4-1-Start) UI
 // This reads the race officer "5-minute gun" broadcast and displays:
 //  - the selected preparatory flag (P/I/Z/U/BLACK)
 //  - a live countdown timer to the start
@@ -80,7 +84,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // Date string used in API calls ("YYYY-MM-DD")
   late String todayDate;
 
-  // NEW: START SEQUENCE STATE (User view)
+  // START SEQUENCE STATE (User view)
 
   // Holds the current start sequence status for this boat's class (if the RO has started it)
   //
@@ -111,6 +115,20 @@ class _UserBoatPageState extends State<UserBoatPage> {
   DateTime? serverNowUtc;
   DateTime? sequenceStartUtc; // store once so countdown doesn't reset
 
+  // BOAT START RECORD STATE
+  // Holds this boat's race start record from GET /race-starts/boat.
+  // Used to display the scheduled start time before the 5-minute gun fires.
+  // Example structure:
+  // {
+  //   "id": 42,
+  //   "boat_id": 7,
+  //   "race_date": "2026-03-01",
+  //   "start_time": "18:30:00",
+  //   "finish_time": null,
+  //   ...
+  // }
+  Map<String, dynamic>? boatStart;
+
   // CHECK-IN STATE
   // Tracks whether this competitor has confirmed they are racing today.
   // Set to true after a successful POST /check-in or if GET /check-ins
@@ -122,6 +140,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
   //   - building today's date string
   //   - loading the current course
   //   - loading today's class results for this boat's class
+  //   - loading the boat's scheduled start time
   //   - prompting the check-in dialog (after the first frame renders)
   @override
   void initState() {
@@ -135,6 +154,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     // Kick off the asynchronous loads
     _loadCurrentCourse();
     _loadClassResults();
+    _loadBoatStart();
 
     // Start listening for the live start sequence for this boat's class
     _startStartSequenceTimers();
@@ -218,11 +238,11 @@ class _UserBoatPageState extends State<UserBoatPage> {
     super.dispose();
   }
 
-  // Start squence poll and tick 
+  // Start sequence poll and tick
 
   // Starts:
   //  - polling the backend every 10 seconds for the current sequence state
-  //  - ticking locally every second to update the countdown smoothly
+  //  - ticking locally every second to update the countdown and elapsed timer smoothly
   void _startStartSequenceTimers() {
     // Poll backend for accuracy (e.g., RO restarts or changes prep flag)
     pollTimer = Timer.periodic(
@@ -230,10 +250,10 @@ class _UserBoatPageState extends State<UserBoatPage> {
       (_) => _loadStartSequence(),
     );
 
-    // Local tick keeps countdown smooth between polls
-    tickTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    // Local tick keeps countdown and elapsed timer smooth between polls
+    tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (sequenceStartUtc != null) {
-        if (mounted) setState(() {}); // UI rebuild only, countdown runs off DateTime.now()
+        if (mounted) setState(() {}); // UI rebuild only, timers run off DateTime.now()
       }
     });
 
@@ -276,7 +296,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
   }
 
 
-  // Load Class reaults for this Boats's class
+  // Load Class results for this Boat's class
 
   // Loads race results for this boat's class (e.g. "White Sail 1")
   // for today's date from GET /race-results
@@ -320,11 +340,36 @@ class _UserBoatPageState extends State<UserBoatPage> {
     }
   }
 
-  // load start sequence for this boat's class
+  // Load this boat's race start record
+  //
+  // Calls GET /race-starts/boat?boat_id=X&race_date=Y
+  // Returns the scheduled start time set by the race officer via class-start.
+  // Used to display "Scheduled start: 18:30" before the 5-minute gun fires.
+  Future<void> _loadBoatStart() async {
+    try {
+      final res = await dio.get(
+        "/race-starts/boat",
+        queryParameters: {
+          "boat_id": widget.boat["id"],
+          "race_date": todayDate,
+        },
+      );
+      setState(() {
+        boatStart = res.data as Map<String, dynamic>;
+      });
+    } catch (_) {
+      // 404 means no start time set yet — that is fine, we just don't show it
+      setState(() {
+        boatStart = null;
+      });
+    }
+  }
+
+  // Load start sequence for this boat's class
 
   // Calls GET /start-sequence/status for the boat's class:
   // - If the RO has fired the 5-minute gun, we get sequence_start_utc and prep_flag and server_time_utc.
-  // - If not, we show "Start sequence not started yet."
+  // - If not, we fall through to showing the scheduled start time.
   Future<void> _loadStartSequence() async {
     setState(() {
       loadingStartSequence = true;
@@ -338,23 +383,8 @@ class _UserBoatPageState extends State<UserBoatPage> {
         raceDate: todayDate,
       );
 
-      // Check if this sequence is still active (countdown > 0)
-      // If the race already started, discard the stale sequence so the
-      // countdown card doesn't show "STARTED" from a previous run.
       final startStr = res["sequence_start_utc"] as String;
       final seqStart = DateTime.parse(startStr).toUtc();
-      final startMoment = seqStart.add(const Duration(minutes: 5));
-      final remaining = startMoment.difference(DateTime.now().toUtc());
-
-      if (remaining.inSeconds <= 0) {
-        // Sequence is finished — treat as no active sequence
-        setState(() {
-          startSequence = null;
-          sequenceStartUtc = null;
-          startSequenceError = null;
-        });
-        return;
-      }
 
       setState(() {
         startSequence = res;
@@ -365,10 +395,12 @@ class _UserBoatPageState extends State<UserBoatPage> {
         }
       });
     } catch (e) {
-      // If no sequence exists yet, users should see a friendly waiting message
+      // If no sequence exists yet, clear sequence state.
+      // The UI will fall through to showing the scheduled start time
+      // (if one exists) or nothing at all.
       setState(() {
         startSequence = null;
-        startSequenceError = "Start sequence not started yet for your class.";
+        startSequenceError = null;
         serverNowUtc = null;
       });
     } finally {
@@ -385,7 +417,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // Example: 3672 seconds - "01:01:12"
   String _formatDuration(num? seconds) {
     // If null, we return em dash to indicate "not available"
-    if (seconds == null) return "—";
+    if (seconds == null) return "\u2014";
 
     final d = Duration(seconds: seconds.toInt());
 
@@ -398,7 +430,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     return "$h:$m:$s";
   }
 
-  // Format Countdown- "MM:SS" For Start Sequence
+  // Format Countdown - "MM:SS" For Start Sequence
 
   // Converts a Duration to MM:SS for the start countdown.
   // If negative, clamps to 00:00 after the start.
@@ -407,6 +439,18 @@ class _UserBoatPageState extends State<UserBoatPage> {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+  }
+
+  // Format Elapsed Racing Time - "HH:MM:SS"
+  //
+  // Converts a Duration to HH:MM:SS for the elapsed racing timer.
+  // Used after the start to show how long the competitor has been racing.
+  String _formatElapsed(Duration d) {
+    final totalSeconds = d.inSeconds < 0 ? 0 : d.inSeconds;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
   }
 
   // Determine which phase of the sequence we are in (5 / 4 / 1 / STARTED)
@@ -442,7 +486,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     // - a finish_time
     // - a corrected_seconds value
 
-    // We keep this logic in case we want to change the UI if the race is fully finished, but we are no longer showing "Today's result: X of Y"
+    // We keep this logic in case we want to change the UI if the race is fully finished
     final allFinished = classResults.isNotEmpty &&
         classResults.every(
           (r) =>
@@ -505,16 +549,17 @@ class _UserBoatPageState extends State<UserBoatPage> {
 
             const SizedBox(height: 16),
 
-            // Start Sequence Card(5–4–1–Start)
-
-            // This section shows:
-            //  Preparatory flag (P/I/Z/U/BLACK) chosen by the race officer
-            //  Live countdown timer to the start
-            //  Current phase (5 minute, 4 minute, 1 minute, STARTED)
+            // Race Status Card
+            //
+            // This section shows one of three states:
+            //  1. BEFORE 5-min gun: Scheduled start time (e.g. "18:30")
+            //  2. DURING countdown: Live countdown (05:00 -> 00:00)
+            //  3. AFTER start: Elapsed racing time ticking up (e.g. "00:12:34")
+            //
             // It is shown per-class, so boats only see the sequence for their own class.
             loadingStartSequence
                 ? const Center(child: CircularProgressIndicator())
-                : _buildStartSequenceCard(),
+                : _buildRaceStatusCard(),
 
             const SizedBox(height: 16),
 
@@ -560,84 +605,178 @@ class _UserBoatPageState extends State<UserBoatPage> {
     );
   }
 
-  // build start sequence card
-  // Builds the UI card that shows:
-  // - flag selected by race officer
-  // - countdown to the start for this boat's class
-  // - current phase label (5 / 4 / 1 / STARTED)
-  Widget _buildStartSequenceCard() {
-    // If there is no active start sequence, don't show anything.
-    // We purposely return an empty widget instead of a "waiting" message
-    // so the user page isn't cluttered before the race officer acts.
-    if (startSequence == null) {
-      return const SizedBox.shrink();
-    }
+  // Build Race Status Card
+  //
+  // Unified card that shows the appropriate state:
+  //  STATE 1 — Before 5-minute gun: scheduled start time from race officer
+  //  STATE 2 — During countdown: live MM:SS countdown (5-4-1-Go)
+  //  STATE 3 — After start: elapsed racing time HH:MM:SS ticking up
+  Widget _buildRaceStatusCard() {
 
-    final s = startSequence!;
+    // ── Check if we have an active start sequence ──
+    if (startSequence != null) {
+      final seqStartUtc =
+          DateTime.parse(startSequence!["sequence_start_utc"] as String).toUtc();
+      final startMomentUtc = seqStartUtc.add(const Duration(minutes: 5));
+      final nowUtc = DateTime.now().toUtc();
+      final timeToStart = startMomentUtc.difference(nowUtc);
 
-    // Parse times returned by backend
-    final seqStartUtc =
-        DateTime.parse(s["sequence_start_utc"] as String).toUtc();
+      // ── STATE 3: Race has started — show elapsed timer ──
+      if (timeToStart.inSeconds <= 0) {
+        final elapsed = nowUtc.difference(startMomentUtc);
+        return Card(
+          color: AppTheme.primary,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Racing \u2014 ${widget.boat["class_name"]}",
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
 
-    final nowUtc = DateTime.now().toUtc();
+                // Large elapsed time HH:MM:SS ticking up every second
+                Center(
+                  child: Text(
+                    _formatElapsed(elapsed),
+                    style: const TextStyle(
+                      fontSize: 52,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
 
-    // The RO pressed "5-minute gun" at sequence_start_utc
-    // The actual START happens 5 minutes after that moment.
-    final startMomentUtc = seqStartUtc.add(const Duration(minutes: 5));
-    final timeToStart = startMomentUtc.difference(nowUtc);
-
-    // If the countdown has finished (race already started), hide the card.
-    // This prevents showing a stale "STARTED" banner from a previous sequence
-    // or from a completed countdown that's no longer useful to the sailor.
-    if (timeToStart.inSeconds <= 0) {
-      return const SizedBox.shrink();
-    }
-
-
-    return Card(
-      // Light background to differentiate from the other cards
-      color: AppTheme.primary,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title shows boat class so user knows this is their fleet countdown
-            Text(
-              "Start sequence — ${widget.boat["class_name"]}",
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+                const Center(
+                  child: Text(
+                    "Time racing",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ),
+          ),
+        );
+      }
 
-            const SizedBox(height: 12),
-
-            
-            // Large countdown MM:SS
-            Center(
-              child: Text(
-                _formatCountdown(timeToStart),
+      // ── STATE 2: Countdown is active — show live countdown ──
+      return Card(
+        color: AppTheme.primary,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Start sequence \u2014 ${widget.boat["class_name"]}",
                 style: const TextStyle(
-                  fontSize: 52,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
 
-            const SizedBox(height: 6),
-
-            // Phase label (5 minute / 4 minute / 1 minute / STARTED)
-            Center(
-              child: Text(
-                _sequencePhaseLabel(timeToStart),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              // Large countdown MM:SS
+              Center(
+                child: Text(
+                  _formatCountdown(timeToStart),
+                  style: const TextStyle(
+                    fontSize: 52,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 6),
+
+              // Phase label (5 minute / 4 minute / 1 minute)
+              Center(
+                child: Text(
+                  _sequencePhaseLabel(timeToStart),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    }
+
+    // ── STATE 1: No active sequence — show scheduled start time ──
+    //
+    // Priority order:
+    //  1. Per-class start time from race_starts table (set via "Set Start" on admin page)
+    //     This is class-specific, e.g. White Sail 1 at 11:00, White Sail 2 at 11:10
+    //  2. General course start time from race_day_settings (set via "Select Course")
+    //     This is the same for all classes — used as a fallback before class times are set
+    //  3. Nothing — no times set yet
+
+    String? displayTime;
+    String subtitle = "Scheduled start";
+
+    if (boatStart != null && boatStart!["start_time"] != null) {
+      // Per-class time exists — show that (most accurate)
+      // start_time comes as "HH:MM:SS" from the backend
+      final startTimeStr = boatStart!["start_time"] as String;
+      // Strip seconds: "HH:MM:SS" -> "HH:MM" for cleaner display
+      displayTime = startTimeStr.length >= 5
+          ? startTimeStr.substring(0, 5)
+          : startTimeStr;
+      subtitle = "Your class start";
+    } else if (currentCourse != null && currentCourse!["start_time"] != null) {
+      // No per-class time yet, but course has a general start time — show as fallback
+      displayTime = currentCourse!["start_time"] as String;
+      subtitle = "Scheduled start";
+    }
+
+    if (displayTime != null) {
+      return Card(
+        color: AppTheme.primary,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "${widget.boat["class_name"]}",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Large scheduled start time
+              Center(
+                child: Text(
+                  displayTime,
+                  style: const TextStyle(
+                    fontSize: 52,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              Center(
+                child: Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ── No data at all — no start time set, no sequence fired ──
+    // Don't clutter the page; return empty space.
+    return const SizedBox.shrink();
   }
 
   // Build Today's Course Card
@@ -753,6 +892,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
                   DataColumn(label: Text("Boat")),
                   DataColumn(label: Text("Elapsed")),
                   DataColumn(label: Text("Corrected")),
+                  DataColumn(label: Text("Code")),
                 ], // Reference: Flutter DataTable Docs [F6]
 
                 // Build one row per boat result
@@ -781,6 +921,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
                       DataCell(Text(row["name"] as String, style: style)),
                       DataCell(Text(_formatDuration(elapsed), style: style)),
                       DataCell(Text(_formatDuration(corrected), style: style)),
+                      DataCell(Text((row["result_code"] as String?) ?? (row["code"] as String?) ?? "", style: style)),
                     ],
                   );
                 }).toList(),
