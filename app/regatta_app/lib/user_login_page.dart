@@ -468,5 +468,3 @@ class _UserLoginPageState extends State<UserLoginPage> {
 // [A1]  W3C, 2018. Web Content Accessibility Guidelines (WCAG) 2.1.
 // [A2]  Material Design, 2024. Dark theme design guidelines.
 
-// Deployment:
-// [RD1] Railway, 2025. Railway Deployment Documentation.

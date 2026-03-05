@@ -1019,13 +1019,14 @@ class _UserBoatPageState extends State<UserBoatPage> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 // Column headings for the results
+                // Styled white and bold so they stand out against the blue card background [A1]
                 columns: const [
-                  DataColumn(label: Text("Pos")),
-                  DataColumn(label: Text("Sail No")),
-                  DataColumn(label: Text("Boat")),
-                  DataColumn(label: Text("Elapsed")),
-                  DataColumn(label: Text("Corrected")),
-                  DataColumn(label: Text("Code")),
+                  DataColumn(label: Text("Pos", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text("Sail No", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text("Boat", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text("Elapsed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text("Corrected", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text("Code", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                 ], // Reference: Flutter DataTable Docs [F6]
 
                 // Build one row per boat result

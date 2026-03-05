@@ -463,9 +463,9 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
         
         // Example: start = 11:05
         //   At 10:59 - fiveMinBefore = 11:00, secondsPastTrigger = -1, skip (not yet)
-        //   At 11:00 - secondsPastTrigger = 0, start still future → FIRE ✓
-        //   At 11:02 - admin just set the time, secondsPastTrigger = 120, start still future → FIRE ✓
-        //   At 11:05 - start time reached, nowUtc.isBefore = false → skip (too late)
+        //   At 11:00 - secondsPastTrigger = 0, start still future - FIRE 
+        //   At 11:02 - admin just set the time, secondsPastTrigger = 120, start still future - FIRE 
+        //   At 11:05 - start time reached, nowUtc.isBefore = false - skip (too late)
         
         // Reference: DateTime.isBefore for future-check [F31]
         // Reference: DateTime.difference for trigger calculation [F31]

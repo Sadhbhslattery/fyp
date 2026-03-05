@@ -88296,8 +88296,8 @@ s.ay=s.z=null
 s.as="No start sequence started yet for "+this.b},
 $S:0}
 A.apc.prototype={
-$1(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c=new A.dg(Date.now(),0,!1).mZ()
-for(s=this.a,r=s.gyY(),q=r.length,p=c.a,o=c.b,n=t.f,m=t.N,l=t.z,k=s.ch,j=0;j<r.length;r.length===q||(0,A.C)(r),++j){i=r[j]
+$1(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d=new A.dg(Date.now(),0,!1).mZ()
+for(s=this.a,r=s.gyY(),q=r.length,p=d.a,o=d.b,n=t.f,m=t.N,l=t.z,k=s.ch,j=0;j<r.length;r.length===q||(0,A.C)(r),++j){i=r[j]
 if(k.p(0,i))continue
 g=J.bl(s.e)
 while(!0){if(!g.u()){h=null
@@ -88305,10 +88305,12 @@ break}f=A.hh(n.a(g.gM()),m,l)
 if(J.d(f.h(0,"class_name"),i)){h=s.F1(f)
 break}}if(h==null)continue
 e=h.p5(-3e8)
-d=B.e.cD(o-e.b+1000*(p-e.a),1e6)
-if(d>=0&&d<=30){k.D(0,i)
+if(B.e.cD(o-e.b+1000*(p-e.a),1e6)>=0){g=h.a
+if(p>=g)g=p===g&&o<h.b
+else g=!0}else g=!1
+if(g){k.D(0,i)
 s.rZ(i)
-A.wZ().$1("Auto-fired 5-min gun for "+i+" at "+c.ard())}}},
+A.wZ().$1("Auto-fired 5-min gun for "+i+" at "+d.ard())}}},
 $S:48}
 A.aoX.prototype={
 $0(){return this.a.Q=this.b},

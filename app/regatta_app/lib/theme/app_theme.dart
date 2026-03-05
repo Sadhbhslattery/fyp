@@ -1,22 +1,22 @@
 // RCYC Regatta Timing System — App Theme
-//
+
 // Design philosophy: deep-navy nautical palette with teal accents.
 // Optimised for outdoor readability on the water (high contrast, 
 // clear hierarchy) while looking polished for stakeholder demos.
-//
+
 // Colour palette:
-//   Background   #0B1A2E  — deep navy, easier on eyes than pure black
-//   Surface      #0F2440  — card/panel backgrounds
-//   Teal         #06B6D4  — live data, countdowns, user highlight
-//   Green        #10B981  — success, checked-in, clean finish
-//   Gold/Amber   #F59E0B  — warnings, DNF/RET codes
-//   Red          #EF4444  — errors, OCS/DSQ/BFD codes
-//   Text         #EDF2F7  — warm white for primary text
+//   Background  #0B1A2E  — deep navy, easier on eyes than pure black
+//   Surface  #0F2440  — card/panel backgrounds
+//   Teal #06B6D4  — live data, countdowns, user highlight
+//   Green #10B981  — success, checked-in, clean finish
+//   Gold/Amber #F59E0B  — warnings, DNF/RET codes
+//   Red  #EF4444  — errors, OCS/DSQ/BFD codes
+//   Text #EDF2F7  — warm white for primary text
 
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // ── Base / Structure ──
+  // Base / Structure
   static const Color bg         = Color(0xFF0B1A2E);
   static const Color surface    = Color(0xFF0F2440);
   static const Color surface2   = Color(0xFF132D4F);
@@ -24,29 +24,29 @@ class AppTheme {
   static const Color border     = Color(0xFF1E3A5F);
   static const Color borderLight = Color(0xFF264673);
 
-  // ── Text hierarchy ──
+  // Text hierarchy 
   static const Color textPrimary   = Color(0xFFEDF2F7);
   static const Color textSecondary = Color(0xFF94A3B8);
   static const Color textMuted     = Color(0xFF64748B);
   static const Color disabled      = Color(0xFF475569);
 
-  // ── Brand / Actions ──
+  // Brand / Actions 
   static const Color primary     = Color(0xFF1E6CB6);
   static const Color primarySoft = Color(0x331E6CB6);
 
-  // ── Accent ──
+  // Accent 
   static const Color teal        = Color(0xFF06B6D4);
   static const Color tealGlow    = Color(0x2606B6D4);  // 15% opacity
   static const Color tealSoft    = Color(0x1406B6D4);  // 8% opacity
 
-  // ── Status / Race semantics ──
+  // Status / Race semantics 
   static const Color ok     = Color(0xFF10B981);  // Clean finish / checked-in
   static const Color info   = Color(0xFF1E6CB6);  // Informational
   static const Color warn   = Color(0xFFF59E0B);  // DNF, RET — attention
   static const Color danger = Color(0xFFEF4444);  // OCS, DSQ, BFD — penalty
   static const Color live   = Color(0xFF06B6D4);  // Countdown / timing accent
 
-  // ── Theme Data ──
+  // Theme Data 
   static final ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
@@ -66,7 +66,7 @@ class AppTheme {
       onError: Colors.white,
     ),
 
-    // ── AppBar ──
+    // AppBar 
     appBarTheme: const AppBarTheme(
       backgroundColor: bg,
       foregroundColor: textPrimary,
@@ -80,7 +80,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Cards ──
+    // Cards 
     cardTheme: CardThemeData(
       color: surface,
       elevation: 0,
@@ -91,14 +91,14 @@ class AppTheme {
       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
     ),
 
-    // ── Divider ──
+    // Divider 
     dividerTheme: const DividerThemeData(
       color: border,
       thickness: 1,
       space: 24,
     ),
 
-    // ── Typography ──
+    // Typography 
     textTheme: ThemeData.dark().textTheme.copyWith(
       headlineSmall: const TextStyle(
         color: textPrimary,
@@ -145,7 +145,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Elevated Buttons ──
+    // Elevated Buttons 
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: primary,
@@ -163,7 +163,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Outlined Buttons ──
+    // Outlined Buttons 
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: textPrimary,
@@ -178,7 +178,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Text Buttons ──
+    // Text Buttons 
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: teal,
@@ -186,7 +186,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Input Fields ──
+    // Input Fields 
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: surface2,
@@ -210,7 +210,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Chips ──
+    // Chips 
     chipTheme: ChipThemeData(
       backgroundColor: surface2,
       disabledColor: border,
@@ -232,7 +232,7 @@ class AppTheme {
       ),
     ),
 
-    // ── DataTables ──
+    // DataTables
     dataTableTheme: DataTableThemeData(
       headingTextStyle: const TextStyle(
         color: textMuted,
@@ -252,10 +252,10 @@ class AppTheme {
       ),
     ),
 
-    // ── Icons ──
+    // Icons 
     iconTheme: const IconThemeData(color: textSecondary),
 
-    // ── SnackBars ──
+    // SnackBars 
     snackBarTheme: SnackBarThemeData(
       backgroundColor: surface2,
       contentTextStyle: const TextStyle(color: textPrimary),
@@ -263,7 +263,7 @@ class AppTheme {
       behavior: SnackBarBehavior.floating,
     ),
 
-    // ── Bottom Sheets ──
+    // Bottom Sheets 
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: surface,
       shape: RoundedRectangleBorder(
@@ -271,7 +271,7 @@ class AppTheme {
       ),
     ),
 
-    // ── Dialogs ──
+    // Dialogs 
     dialogTheme: DialogThemeData(
       backgroundColor: surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -283,10 +283,10 @@ class AppTheme {
     ),
   );
 
-  // ── Semantic helpers ──
+  // Semantic helpers 
 
-  /// Returns a colour for a World Sailing result code.
-  /// Red for OCS/DSQ/BFD, amber for DNF/RET/DNS, green for clean.
+  // Returns a colour for a World Sailing result code.
+  // Red for OCS/DSQ/BFD, amber for DNF/RET/DNS, green for clean.
   static Color statusColor(String? code) {
     if (code == null || code.isEmpty) return ok;
     final c = code.toUpperCase().trim();
@@ -295,12 +295,12 @@ class AppTheme {
     return ok;
   }
 
-  /// Background colour for a result code badge (15% opacity of statusColor).
+  // Background colour for a result code badge (15% opacity of statusColor).
   static Color statusBadgeBg(String? code) {
     return statusColor(code).withAlpha(38);  // ~15%
   }
 
-  /// Border colour for a result code badge (30% opacity of statusColor).
+  // Border colour for a result code badge (30% opacity of statusColor).
   static Color statusBadgeBorder(String? code) {
     return statusColor(code).withAlpha(76);  // ~30%
   }

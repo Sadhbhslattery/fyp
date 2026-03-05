@@ -45,7 +45,6 @@ class _LoginPageState extends State<LoginPage> {
   // Dio instance with the Railway backend URL as the base.
   // Every dio.post("/login") call prepends this URL automatically.
   // Reference: Dio BaseOptions [D2]
-  // Reference: Railway deployment [RD1]
 
   // Form Key
   final _formKey = GlobalKey<FormState>();
