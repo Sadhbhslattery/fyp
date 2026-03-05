@@ -75,8 +75,6 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
 
   late String todayDate;
 
-
-
   // Start Sequence 
 
   StartSequenceStatusDto? startSequence;
@@ -87,14 +85,17 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   Timer? tickTimer;
   DateTime? serverNowUtc;
 
-  // ── Auto-fire tracking ──
+  // Auto-fire tracking 
   // Keeps track of which classes have already had their 5-minute gun fired
   // (either manually by tapping "5-min" or automatically by the auto-fire timer).
   // Prevents the same class from being fired twice.
+  // Reference: Dart Set class for unique membership tracking [F35]
   final Set<String> _autoFiredClasses = {};
 
   // Timer that checks every second whether any class is 5 minutes away from
   // its scheduled start time. If so, it automatically fires the 5-minute gun.
+  // Cancelled and recreated each time _loadData() completes.
+  // Reference: Timer.periodic for 1-second scheduling checks [F23]
   Timer? _autoFireTimer;
 
   @override
@@ -149,11 +150,12 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
           .toList();
 
       // Start the auto-fire timer now that we know each class's start time.
-      // Safe to call repeatedly — it cancels the previous timer first.
+      // Safe to call repeatedly — it cancels the previous timer first. [F23]
       _startAutoFireTimer();
 
-      // If we don't already have a sequence selected (e.g. page was re-entered),
-      // probe the backend for any active countdown so we can restore it.
+      // If we don't already have a sequence selected (e.g. page was re-entered
+      // after navigating away), probe the backend for any active countdown
+      // so we can restore it. Uses sequential GET calls per class. [D1][D3][F31]
       if (selectedSequenceClass == null) {
         await _restoreActiveSequence();
       }
@@ -193,7 +195,7 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   }
 
 
-  // Start Time parsing (IMPORTANT)
+  // Start Time parsing 
 
   // Backend gives start_time as "HH:MM:SS"
   // We turn it into a DateTime for today and treat it as UTC for comparisons.
@@ -215,7 +217,7 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     return _parseStartDateTimeUtc(startStr);
   }
 
-  // For the UI header: show the scheduled start time per CLASS (all boats share it)
+  // For the UI header: show the scheduled start time per class (all boats share it)
   String _classStartTimeLabel(String className) {
     for (final b in boats) {
       final boat = Map<String, dynamic>.from(b as Map);
@@ -268,34 +270,49 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
       _boatsForClass(className).where(_hasFinished).toList();
 
 
-  // ── Restore Active Sequence on Page Load ──
-  //
+  // Restore Active Sequence on Page Load 
+  
   // When the admin navigates away and comes back, the in-memory state
   // (selectedSequenceClass, startSequence, timers) is lost because
   // initState creates a fresh widget. This method probes the backend
   // for each class to see if a countdown is still active (time remaining > 0).
   // If found, it restores the countdown card so the admin doesn't lose
   // visibility of a running sequence.
+  
+  // Reference: Dart async/await for sequential HTTP calls [D1][D3]
+  // Reference: DateTime.difference to check if time remaining > 0 [F31]
+  // Reference: Duration class for 5-minute addition to sequence start [F32]
+  // Reference: Set.add to mark restored class as already fired [F35]
+  // Reference: debugPrint for development logging [F34]
   Future<void> _restoreActiveSequence() async {
+    // Loop through every class to check if any has an active countdown [F30]
     for (final className in classNames) {
       try {
+        // Query the backend for the sequence status of this class [D1][D3][B1]
         final res = await startSeqApi.getStatus(
           className: className,
           raceDate: todayDate,
         );
 
         // Check if this sequence still has time remaining
+        // Parse the response into a DTO and calculate the race start moment [F31][F32]
         final dto = StartSequenceStatusDto.fromMap(res);
+        // The race starts 5 minutes after the sequence was initiated [F32]
         final startMoment = dto.sequenceStartUtc.add(const Duration(minutes: 5));
+        // Calculate how many seconds remain until the race starts [F31]
         final remaining = startMoment.difference(DateTime.now().toUtc());
 
         if (remaining.inSeconds > 0) {
-          // Found an active sequence — restore it
+          // Found an active sequence — restore it so the countdown card reappears
           setState(() {
+            // Set the selected class so the UI renders the countdown card [F36]
             selectedSequenceClass = className;
-            _autoFiredClasses.add(className); // don't re-fire
+            // Mark as already fired so auto-fire doesn't re-trigger it [F35]
+            _autoFiredClasses.add(className);
           });
+          // Restart the poll and tick timers for countdown updates [F23]
           _startSequenceTimers();
+          // Log for debugging — shows which class was restored and time left [F34]
           debugPrint("Restored active sequence for $className (${remaining.inSeconds}s remaining)");
           return; // only restore the first active one
         }
@@ -307,43 +324,61 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
 
 
   // Start Sequence Timers
-
+  // Sets up two timers for the admin countdown display: [F23]
+  //  - pollTimer (2 seconds): fetches latest sequence state from backend
+  //  - tickTimer (1 second): advances the local server time for smooth countdown
   void _startSequenceTimers() {
+    // Cancel any existing timers before creating new ones to avoid duplicates
     pollTimer?.cancel();
     tickTimer?.cancel();
 
+    // Poll the backend every 2 seconds for the latest sequence data [F23][D1][D3]
     pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (selectedSequenceClass != null) _loadStartSequence();
     });
 
+    // Tick locally every 1 second to keep the countdown display smooth [F23]
+    // Advances serverNowUtc by 1 second between polls to avoid jumpy display
     tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (serverNowUtc != null) {
+        // Advance the cached server time by 1 second [F32]
         serverNowUtc = serverNowUtc!.add(const Duration(seconds: 1));
+        // Trigger a rebuild only if the widget is still mounted [F36]
         if (mounted) setState(() {});
       }
     });
 
+    // Fetch immediately rather than waiting for the first 2-second tick
     _loadStartSequence();
   }
 
+  // Fetches the current start sequence status from the backend for the selected class.
+  // Called every 2 seconds by the pollTimer. Updates serverNowUtc so the tick timer
+  // stays synchronised with the server clock. [D1][D3][B1]
   Future<void> _loadStartSequence() async {
+    // Grab the selected class into a local variable to avoid null issues [F8]
     final cls = selectedSequenceClass;
     if (cls == null) return;
 
     try {
+      // Call GET /start-sequence/status for this class and date [D1][D3]
       final res = await startSeqApi.getStatus(
         className: cls,
         raceDate: todayDate,
       );
 
+      // Parse the response into a typed DTO for easier field access [F29]
       final dto = StartSequenceStatusDto.fromMap(res);
 
+      // Update state with the new sequence data and server time [F36]
       setState(() {
         startSequence = dto;
+        // Sync our local server time with the backend's clock [F31]
         serverNowUtc = dto.serverTimeUtc;
         startSequenceError = null;
       });
     } catch (_) {
+      // If the request fails (e.g. sequence not started), clear the countdown state
       setState(() {
         startSequence = null;
         serverNowUtc = null;
@@ -352,76 +387,96 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
     }
   }
 
-  // ── Auto-Fire Logic ──
-  //
+  // Auto-Fire Logic 
+  
   // Called once after data loads. Starts a 1-second timer that checks
   // each class's scheduled start time. If the current time is within
   // 5 minutes of the start (i.e. now >= startTime - 5min), and the
   // class hasn't been fired yet, it automatically triggers the
   // 5-minute gun — exactly as if the admin tapped "5-min" manually.
-  //
-  // IMPORTANT: Only auto-fires within a 30-second window of the exact
+  
+  // Only auto-fires within a 30-second window of the exact
   // 5-minute mark. This prevents misfiring when the admin sets a start
   // time that's already less than 5 minutes away — in that case the
   // admin should manually tap "5-min" instead.
-  //
+  
   // Example: If White Sail 1 is set to start at 18:30:
   //   - fiveMinBefore = 18:25:00
-  //   - At 18:24:59 → not yet, skip
-  //   - At 18:25:00 → 0 seconds past trigger, FIRE ✓
-  //   - At 18:25:29 → 29 seconds past trigger, FIRE ✓ (catches slight delays)
-  //   - At 18:25:31 → 31 seconds past trigger, too late, skip (admin must tap "5-min")
-  //
+  //   - At 18:24:59 - not yet, skip
+  //   - At 18:25:00 - 0 seconds past trigger, FIRE ✓
+  //   - At 18:25:29 - 29 seconds past trigger, FIRE ✓ (catches slight delays)
+  //   - At 18:25:31 - 31 seconds past trigger, too late, skip (admin must tap "5-min")
+  
   // The competitor page picks up the countdown automatically because
-  // it polls GET /start-sequence/status every 10 seconds.
+  // it polls GET /start-sequence/status every 10 seconds. [F23][B1]
+  
+  // Reference: Timer.periodic for 1-second scheduling loop [F23]
+  // Reference: DateTime.difference for trigger window calculation [F31]
+  // Reference: Duration.subtract to compute 5-minute-before moment [F32]
+  // Reference: Set.contains / Set.add for duplicate prevention [F35]
+  // Reference: debugPrint for auto-fire logging [F34]
 
   void _startAutoFireTimer() {
+    // Cancel any existing auto-fire timer before creating a new one [F23]
     _autoFireTimer?.cancel();
 
+    // Check every second whether any class is due for its 5-minute gun [F23]
     _autoFireTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      // Get current UTC time for comparison with scheduled start times [F31]
       final nowUtc = DateTime.now().toUtc();
 
+      // Loop through all classes to check their scheduled start times [F30]
       for (final className in classNames) {
-        // Skip if already fired (manually or automatically)
+        // Skip if already fired (manually or automatically) [F35]
         if (_autoFiredClasses.contains(className)) continue;
 
         // Find the scheduled start time for this class
         // (all boats in a class share the same start time)
         DateTime? classStartUtc;
         for (final b in boats) {
+          // Convert dynamic map to typed Map for field access [F8]
           final boat = Map<String, dynamic>.from(b as Map);
           if (boat["class_name"] == className) {
             classStartUtc = _scheduledStartUtcForBoat(boat);
-            break;
+            break; // All boats in a class share the same start time
           }
         }
 
         // No start time set yet — skip this class
         if (classStartUtc == null) continue;
-
         // Calculate when the 5-minute gun should fire
         // (exactly 5 minutes before the scheduled start)
         final fiveMinBefore = classStartUtc.subtract(const Duration(minutes: 5));
 
-        // How many seconds past the 5-minute trigger point are we?
-        // Only auto-fire within a 30-second window of the exact moment.
-        // This prevents misfiring when the admin sets a start time that's
-        // already less than 5 minutes away — in that case the admin
-        // should manually tap "5-min" instead.
-        //
-        // Example: start = 18:30, fiveMinBefore = 18:25
-        //   At 18:24:59 → not yet, skip
-        //   At 18:25:00 → 0 seconds past, FIRE
-        //   At 18:25:29 → 29 seconds past, FIRE (catches slight delays)
-        //   At 18:25:31 → 31 seconds past, too late, skip (admin must manually fire)
+        // How many seconds past the 5-minute trigger point are we? [F31]
         final secondsPastTrigger = nowUtc.difference(fiveMinBefore).inSeconds;
-        if (secondsPastTrigger >= 0 && secondsPastTrigger <= 30) {
-          // Mark as fired BEFORE the async call to prevent double-firing
+
+        // Auto-fire condition:
+        //  1. The 5-minute trigger point has passed (secondsPastTrigger >= 0)
+        //  2. The actual race start time is still in the future (race hasn't started)
+        
+        // This handles two scenarios:
+        //  a) Admin page is open and the exact 5-min moment arrives — fires on time
+        //  b) Admin sets a start time where the 5-min mark has already passed
+        //     (e.g. sets 11:05 start at 11:02 — the 11:00 trigger is gone)
+        //     but the race hasn't started yet — fires immediately
+        
+        // Example: start = 11:05
+        //   At 10:59 - fiveMinBefore = 11:00, secondsPastTrigger = -1, skip (not yet)
+        //   At 11:00 - secondsPastTrigger = 0, start still future → FIRE ✓
+        //   At 11:02 - admin just set the time, secondsPastTrigger = 120, start still future → FIRE ✓
+        //   At 11:05 - start time reached, nowUtc.isBefore = false → skip (too late)
+        
+        // Reference: DateTime.isBefore for future-check [F31]
+        // Reference: DateTime.difference for trigger calculation [F31]
+        if (secondsPastTrigger >= 0 && nowUtc.isBefore(classStartUtc)) {
+          // Mark as fired BEFORE the async call to prevent double-firing [F35]
           _autoFiredClasses.add(className);
 
           // Fire the 5-minute gun (same as tapping "5-min" button)
           _fireFiveMinuteGun(className);
 
+          // Log for debugging — shows which class was auto-fired and when [F34]
           debugPrint("Auto-fired 5-min gun for $className at ${nowUtc.toIso8601String()}");
         }
       }
@@ -432,18 +487,25 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
   // Admin Actions
 
 
+  // Fires the 5-minute gun for a given class.
+  // Called either manually (admin taps "5-min" button) or by the auto-fire timer.
+  // Posts to the backend to create a start sequence record, then starts
+  // the local countdown timers to show the countdown card. [D1][D3][B1]
   Future<void> _fireFiveMinuteGun(String className) async {
-    // Mark this class as fired so the auto-fire timer skips it
+    // Mark this class as fired so the auto-fire timer skips it [F35]
     _autoFiredClasses.add(className);
 
     try {
+      // POST to backend to create the start sequence record [D1][D3]
+      // prepFlag "P" = Preparatory flag (standard flag for most starts)
       await startSeqApi.start(
         className: className,
         raceDate: todayDate,
         prepFlag: "P",
       );
-      // countdown starts when the admin actually fires the gun
+      // Set the selected class so the UI shows the countdown card [F36]
       setState(() => selectedSequenceClass = className);
+      // Start poll and tick timers for the countdown display [F23]
       _startSequenceTimers();
 
       if (mounted) {
@@ -763,23 +825,33 @@ class _RaceStartsPageState extends State<RaceStartsPage> {
       ),
     );
 
+    // If user did not confirm, abort the reset
     if (confirmed != true) return;
 
     try {
+      // Send DELETE request to backend to clear all timing data for today [D1][D3][B1]
       await dio.delete("/race-day", queryParameters: {"race_date": todayDate});
+      // Reload all data (boats, race-starts, check-ins) to reflect the cleared state
       await _loadData();
 
       // Clear auto-fire tracking so classes can be re-fired after a reset
+      // Reference: Set.clear to reset all tracked auto-fired classes [F35]
       _autoFiredClasses.clear();
 
-      // Clear the active countdown card — the sequence records may have
-      // been deleted by the backend along with other race-day data.
+      // Clear the active countdown card — the sequence records have been
+      // deleted by the backend (DELETE /race-day clears start_sequences table) [B1][B12]
+      // Reference: setState to update UI after state variables are cleared [F36]
       setState(() {
+        // Clear the selected class so no countdown card is shown
         selectedSequenceClass = null;
+        // Clear the cached sequence data
         startSequence = null;
+        // Clear the server time used for tick-based countdown
         serverNowUtc = null;
+        // Clear any error message
         startSequenceError = null;
       });
+      // Stop the countdown poll and tick timers since there is nothing to count [F23]
       pollTimer?.cancel();
       tickTimer?.cancel();
 
@@ -1001,21 +1073,40 @@ class StartSequenceStatusDto {
 
 // This is the heart of the race timing system.
 
-// Reference: StatefulWidget for complex state management [F14]
-// Reference: Timer.periodic for countdown synchronization [F23]
-// Reference: Duration and DateTime calculations [F8]
-// Reference: UTC timezone handling [B10]
-// Reference: ExpansionTile for class grouping [F26]
-// Reference: RefreshIndicator for pull-to-refresh [F27]
-// Reference: showModalBottomSheet for finish options [F9]
-// Reference: StatefulBuilder for bottom sheet state [F10]
-// Reference: SwitchListTile for OCS toggle [F11]
-// Reference: TextField for penalty input [F4]
-// Reference: ElevatedButton and OutlinedButton [F1]
-// Reference: Dio GET/POST/DELETE methods [D1][D3]
-// Reference: FastAPI timing endpoints [B1]
-// Reference: Query parameters for date filtering [B11]
-// Reference: SnackBar for feedback [F7]
-// Reference: Card for countdown display [F19]
-// Reference: Chip widget for compact check-in display [F28]
-// Reference: showDialog for destructive action confirmation [F9]
+// REFERENCES — This file uses the following sources (full details in
+// the Iteration Report reference list)
+
+// Flutter / Dart:
+// [F1] Google LLC, 2025. Flutter: Introduction to widgets.
+// [F3] Google LLC, 2025. Scaffold class.
+// [F4] Google LLC, 2025. Forms: TextField, TextFormField & validation.
+// [F6] Google LLC, 2025. DataTable class.
+// [F7] Google LLC, 2025. Dialogs & SnackBar.
+// [F8] Google LLC, 2025. Dart language tour: async, futures & Duration.
+// [F9] Google LLC, 2025. showModalBottomSheet.
+// [F10] Google LLC, 2025. StatefulBuilder class.
+// [F11] Google LLC, 2025. SwitchListTile class.
+// [F13] Google LLC, 2025. OutlinedButton & ElevatedButton classes.
+// [F15] Google LLC, 2025. Dart language: collection if / list literals.
+// [F19] Google LLC, 2025. Card class.
+// [F20] Google LLC, 2025. Column class.
+// [F22] Google LLC, 2025. Wrap class.
+// [F23] Dart Team, 2025. Timer class and Timer.periodic.
+// [F26] Google LLC, 2025. ExpansionTile class.
+// [F27] Google LLC, 2025. RefreshIndicator for pull-to-refresh.
+// [F29] Google LLC, 2025. Map data structure and operations.
+// [F30] Google LLC, 2025. List operations and iteration.
+// [F31] Dart Team, 2025. DateTime class - parse, toUtc, difference, isAfter.
+// [F32] Dart Team, 2025. Duration class - arithmetic, comparison, inSeconds.
+// [F34] Google LLC, 2025. debugPrint property.
+// [F35] Dart Team, 2025. Set class, unordered collection of unique values.
+// [F36] Google LLC, 2025. StatefulWidget lifecycle, initState, dispose, mounted.
+// [F37] Google LLC, 2025. Chip class.
+
+// Dio HTTP:
+// [D1] Flutter Community, 2025. Dio package for Dart/Flutter.
+// [D3] Flutter Community, 2025. Dio request methods (GET, POST, DELETE).
+
+// Backend:
+// [B1] Tiangolo, S., 2024. FastAPI – Query Parameters.
+// [B12] SQLAlchemy, 2026. ORM-Enabled INSERT, UPDATE, DELETE statements.

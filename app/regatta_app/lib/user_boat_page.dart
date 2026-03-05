@@ -9,8 +9,8 @@
 // The page pulls data from the backend via FastAPI endpoints:
 //  GET /current-course - what course (and start time) is selected today
 //  GET /race-results   - per-class results (elapsed and corrected times)
-//  GET /check-ins      - whether this boat has already checked in today
-//  POST /check-in      - confirm this boat is racing today
+//  GET /check-ins - whether this boat has already checked in today
+//  POST /check-in - confirm this boat is racing today
 //  GET /race-starts/boat - this boat's scheduled start time for today
 
 // This allows sailors to quickly see:
@@ -115,21 +115,25 @@ class _UserBoatPageState extends State<UserBoatPage> {
   DateTime? serverNowUtc;
   DateTime? sequenceStartUtc; // store once so countdown doesn't reset
 
-  // BOAT START RECORD STATE
+  // Boat Start Record Sate
   // Holds this boat's race start record from GET /race-starts/boat.
-  // Used to display the scheduled start time before the 5-minute gun fires.
+  // Used to display the scheduled start time before the 5-minute gun fires,
+  // and to detect when the admin has finished the boat (finish_time != null).
+  // Polled every 10 seconds so updates appear without manual refresh. [F23][D1][D3]
   // Example structure:
   // {
   //   "id": 42,
   //   "boat_id": 7,
   //   "race_date": "2026-03-01",
   //   "start_time": "18:30:00",
-  //   "finish_time": null,
+  //   "finish_time": null,  // set when admin taps "Finish"
+  //   "elapsed_seconds": null,  // computed by backend on finish
   //   ...
   // }
+  // Reference: Dart nullable Map type for optional backend data [F8]
   Map<String, dynamic>? boatStart;
 
-  // CHECK-IN STATE
+  // Chekc-in State
   // Tracks whether this competitor has confirmed they are racing today.
   // Set to true after a successful POST /check-in or if GET /check-ins
   // shows this boat already checked in. Displayed as a Chip in the boat info card.
@@ -169,7 +173,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
     });
   }
 
-  // CHECK-IN PROMPT
+  // Check in prompt
   // Called once after the first frame renders. Steps:
   //   1. Check GET /check-ins to see if this boat already checked in today.
   //   2. If already checked in, set isCheckedIn = true and skip the dialog.
@@ -192,6 +196,8 @@ class _UserBoatPageState extends State<UserBoatPage> {
     }
 
     // Not checked in yet — show confirmation dialog
+    // Check 'mounted' to avoid showing a dialog if the widget has been
+    // disposed of while the async check-in query was running [F36]
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -246,7 +252,10 @@ class _UserBoatPageState extends State<UserBoatPage> {
   void _startStartSequenceTimers() {
     // Poll backend for accuracy (e.g., RO restarts or changes prep flag)
     // Also re-fetches the boat's start record so the scheduled time updates
-    // when the admin sets per-class start times after the page is already open.
+    // when the admin sets per-class start times after the page is already open,
+    // and so the finish_time is detected when the admin finishes the boat.
+    // Reference: Timer.periodic for recurring HTTP polls [F23]
+    // Reference: Dio GET requests with query parameters [D1][D3][B1]
     pollTimer = Timer.periodic(
       const Duration(seconds: 10),
       (_) {
@@ -255,7 +264,11 @@ class _UserBoatPageState extends State<UserBoatPage> {
       },
     );
 
-    // Local tick keeps countdown and elapsed timer smooth between polls
+    // Local tick keeps countdown and elapsed timer smooth between polls.
+    // Runs every 1 second (not 10) so the elapsed timer updates smoothly.
+    // Only triggers a setState rebuild — actual time is computed from DateTime.now().
+    // Reference: Timer.periodic for 1-second UI ticks [F23]
+    // Reference: setState triggers widget rebuild without re-fetching data [F36]
     tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (sequenceStartUtc != null) {
         if (mounted) setState(() {}); // UI rebuild only, timers run off DateTime.now()
@@ -346,10 +359,18 @@ class _UserBoatPageState extends State<UserBoatPage> {
   }
 
   // Load this boat's race start record
-  //
-  // Calls GET /race-starts/boat?boat_id=X&race_date=Y
-  // Returns the scheduled start time set by the race officer via class-start.
-  // Used to display "Scheduled start: 18:30" before the 5-minute gun fires.
+  
+  // Calls GET /race-starts/boat?boat_id=X&race_date=Y [D1][D3][B1]
+  // Returns the scheduled start time set by the race officer via class-start,
+  // plus finish_time and elapsed_seconds if the boat has been finished.
+  
+  // Used for three purposes:
+  //   1. Display scheduled start time before the 5-minute gun fires (STATE 1)
+  //   2. Display "Your start: HH:MM" on the course card instead of generic course time [F15]
+  //   3. Detect when admin has finished the boat (finish_time != null) to freeze elapsed timer
+  
+  // Polled every 10 seconds via pollTimer so updates appear automatically [F23]
+  // A 404 response means no start time set yet — handled via catch block [F8]
   Future<void> _loadBoatStart() async {
     try {
       final res = await dio.get(
@@ -388,7 +409,9 @@ class _UserBoatPageState extends State<UserBoatPage> {
         raceDate: todayDate,
       );
 
+      // Extract the UTC timestamp when the 5-minute gun was fired [F31]
       final startStr = res["sequence_start_utc"] as String;
+      // Parse the ISO 8601 string into a DateTime object in UTC [F31]
       final seqStart = DateTime.parse(startStr).toUtc();
 
       setState(() {
@@ -424,14 +447,18 @@ class _UserBoatPageState extends State<UserBoatPage> {
     // If null, we return em dash to indicate "not available"
     if (seconds == null) return "\u2014";
 
+    // Convert the raw seconds into a Duration object for easy extraction [F32]
     final d = Duration(seconds: seconds.toInt());
 
+    // Helper function to zero-pad a number to 2 digits (e.g. 5 → "05") [F8]
     String two(int n) => n.toString().padLeft(2, '0');
 
+    // Extract hours, minutes, and seconds components from the Duration [F32]
     final h = two(d.inHours);
     final m = two(d.inMinutes.remainder(60));
     final s = two(d.inSeconds.remainder(60));
 
+    // Return formatted string "HH:MM:SS"
     return "$h:$m:$s";
   }
 
@@ -440,9 +467,13 @@ class _UserBoatPageState extends State<UserBoatPage> {
   // Converts a Duration to MM:SS for the start countdown.
   // If negative, clamps to 00:00 after the start.
   String _formatCountdown(Duration d) {
+    // Clamp negative durations to zero (race has started) [F32]
     final totalSeconds = d.inSeconds < 0 ? 0 : d.inSeconds;
+    // Integer division to extract whole minutes from total seconds [F8]
     final minutes = totalSeconds ~/ 60;
+    // Modulo to get the remaining seconds after extracting minutes [F8]
     final seconds = totalSeconds % 60;
+    // Zero-pad both values to always show two digits (e.g. "05:09") [F8]
     return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
   }
 
@@ -450,19 +481,34 @@ class _UserBoatPageState extends State<UserBoatPage> {
   //
   // Converts a Duration to HH:MM:SS for the elapsed racing timer.
   // Used after the start to show how long the competitor has been racing.
+  // Clamps negative values to 0 to handle any clock drift between client and server.
+  // Reference: Dart Duration class for time arithmetic [F32]
+  // Reference: Dart truncating division operator (~/) for integer division [F8]
+  // Reference: String.padLeft for zero-padding single digits [F8]
   String _formatElapsed(Duration d) {
+    // Clamp negative durations to zero (handles clock drift) [F32]
     final totalSeconds = d.inSeconds < 0 ? 0 : d.inSeconds;
+    // Extract hours by dividing total seconds by 3600 (seconds per hour) [F8]
     final hours = totalSeconds ~/ 3600;
+    // Extract minutes from the remainder after removing hours [F8]
     final minutes = (totalSeconds % 3600) ~/ 60;
+    // Extract remaining seconds after removing hours and minutes [F8]
     final seconds = totalSeconds % 60;
+    // Zero-pad each component to two digits and join with colons [F8]
     return "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
   }
 
   // Determine which phase of the sequence we are in (5 / 4 / 1 / STARTED)
+  // Returns a human-readable label for the current countdown phase.
+  // The phases follow the World Sailing 5-4-1-Go start sequence. [F32]
   String _sequencePhaseLabel(Duration timeToStart) {
+    // If countdown has reached zero or gone negative, the race has started
     if (timeToStart <= Duration.zero) return "STARTED";
+    // More than 4 minutes remaining = we are in the 5-minute signal phase
     if (timeToStart > const Duration(minutes: 4)) return "5 minute signal";
+    // More than 1 minute remaining = we are in the 4-minute / running phase
     if (timeToStart > const Duration(minutes: 1)) return "4 minute / running";
+    // Less than 1 minute remaining = final approach to the start line
     return "1 minute signal";
   }
 
@@ -478,12 +524,15 @@ class _UserBoatPageState extends State<UserBoatPage> {
 
     // Reference: Dart list iteration and Map usage [F8]
 
+    // Search through the class results to find this boat's own row [F29][F30]
+    // Used to determine if the user's boat has a result to highlight
     Map<String, dynamic>? myRow;
     for (final r in classResults) {
+      // Convert the dynamic map to a strongly-typed Map for field access [F8]
       final m = Map<String, dynamic>.from(r as Map);
       if (m["boat_id"] == myBoatId) {
         myRow = m;
-        break;
+        break; // Found our boat, no need to keep searching
       }
     }
 
@@ -555,12 +604,12 @@ class _UserBoatPageState extends State<UserBoatPage> {
             const SizedBox(height: 16),
 
             // Race Status Card
-            //
+            
             // This section shows one of three states:
             //  1. BEFORE 5-min gun: Scheduled start time (e.g. "18:30")
-            //  2. DURING countdown: Live countdown (05:00 -> 00:00)
+            //  2. DURING countdown: Live countdown (05:00 - 00:00)
             //  3. AFTER start: Elapsed racing time ticking up (e.g. "00:12:34")
-            //
+            
             // It is shown per-class, so boats only see the sequence for their own class.
             loadingStartSequence
                 ? const Center(child: CircularProgressIndicator())
@@ -611,42 +660,77 @@ class _UserBoatPageState extends State<UserBoatPage> {
   }
 
   // Build Race Status Card
-  //
-  // Unified card that shows the appropriate state:
+  
+  // Unified card that shows the appropriate state based on a three-state
+  // finite state machine pattern. The state is determined by checking
+  // conditions in priority order (STATE 3 first, then 2, then 1):
+  
   //  STATE 1 — Before 5-minute gun: scheduled start time from race officer
-  //  STATE 2 — During countdown: live MM:SS countdown (5-4-1-Go)
-  //  STATE 3 — After start: elapsed racing time HH:MM:SS ticking up
+  //            Shows per-class time if set, otherwise falls back to general course time [F15]
+  //  STATE 2 — During countdown: live MM:SS countdown (5-4-1-Go) [F32][F31]
+  //  STATE 3 — After start: elapsed racing time HH:MM:SS ticking up [F32][F31]
+  //            Freezes to recorded elapsed_seconds when admin finishes the boat [F8]
+  
+  // Reference: Flutter Card widget for Material Design container [F19]
+  // Reference: Conditional widget rendering in Column children [F15]
+  // Reference: DateTime.difference for countdown and elapsed calculation [F31]
   Widget _buildRaceStatusCard() {
 
-    // ── Check if we have an active start sequence ──
+    // Check if we have an active start sequence 
+    // Reference: DateTime.parse for ISO 8601 UTC string from backend [F31]
+    // Reference: Duration addition to compute race start moment [F32]
+    // Reference: DateTime.difference for countdown calculation [F31]
     if (startSequence != null) {
+      // Parse when the 5-minute gun was fired (UTC timestamp from backend) [F31]
       final seqStartUtc =
           DateTime.parse(startSequence!["sequence_start_utc"] as String).toUtc();
+      // The actual race start moment is 5 minutes after the gun was fired [F32]
       final startMomentUtc = seqStartUtc.add(const Duration(minutes: 5));
+      // Get current time in UTC for consistent comparison with server times [F31]
       final nowUtc = DateTime.now().toUtc();
+      // Calculate how much time remains until the race starts [F31]
+      // Positive = countdown still running, negative or zero = race has started
       final timeToStart = startMomentUtc.difference(nowUtc);
 
-      // ── STATE 3: Race has started — show elapsed timer ──
+      // STATE 3: Race has started — show elapsed timer
       if (timeToStart.inSeconds <= 0) {
 
         // Check if this boat has been finished by the admin.
-        // If so, show the recorded elapsed_seconds as a fixed time.
-        // If not, show a live ticking timer.
+        // boatStart is polled every 10 seconds via _loadBoatStart() [F23][D1][D3]
+        // When the admin taps "Finish", the backend sets finish_time and
+        // computes elapsed_seconds. We detect this by checking finish_time != null.
+        // Reference: Dart null-aware operator for safe field access [F8]
         final bool boatFinished = boatStart != null && boatStart!["finish_time"] != null;
+        // Will hold either the live elapsed time or the frozen finish time [F32]
         final Duration elapsed;
+        // Card header text — changes between "Racing" and "Finished"
         final String title;
+        // Card label text — changes between "Time racing" and "Your finish time"
         final String subtitle;
 
         if (boatFinished) {
-          // Boat has been finished — show fixed elapsed time from the database
+          // Boat has been finished — show fixed elapsed time from the database.
+          // Uses elapsed_seconds recorded by backend (official race time) so it
+          // matches exactly what appears in the results table.
+          // Reference: Duration constructor from integer seconds [F32]
+          // Read elapsed_seconds from backend; default to 0 if null [F8]
           final recordedSeconds = boatStart!["elapsed_seconds"] as int? ?? 0;
+          // Create a fixed Duration from the recorded seconds [F32]
           elapsed = Duration(seconds: recordedSeconds);
+          // Update card header to show "Finished" instead of "Racing"
           title = "Finished \u2014 ${widget.boat["class_name"]}";
+          // Update card label to show "Your finish time" instead of "Time racing"
           subtitle = "Your finish time";
         } else {
-          // Boat still racing — show live ticking elapsed time
+          // Boat still racing — show live ticking elapsed time.
+          // Computed as: now (UTC) minus the moment the race started (5 min after sequence start).
+          // Updates every second via tickTimer calling setState. [F23][F36]
+          // Reference: DateTime.difference for elapsed calculation [F31]
+          // Compute live elapsed time: current UTC time minus the race start moment [F31]
           elapsed = nowUtc.difference(startMomentUtc);
+          // Show "Racing" as the card header while the boat is still on the water
           title = "Racing \u2014 ${widget.boat["class_name"]}";
+          // Show "Time racing" as the card label
           subtitle = "Time racing";
         }
 
@@ -691,7 +775,9 @@ class _UserBoatPageState extends State<UserBoatPage> {
         );
       }
 
-      // ── STATE 2: Countdown is active — show live countdown ──
+      // STATE 2: Countdown is active — show live countdown 
+      // This card is shown when the 5-minute gun has been fired but
+      // the countdown has not yet reached zero. [F19][F20]
       return Card(
         color: AppTheme.primary,
         child: Padding(
@@ -733,23 +819,32 @@ class _UserBoatPageState extends State<UserBoatPage> {
       );
     }
 
-    // ── STATE 1: No active sequence — show scheduled start time ──
-    //
-    // Priority order:
+    // STATE 1: No active sequence — show scheduled start time 
+    
+    // Two-tier fallback logic:
     //  1. Per-class start time from race_starts table (set via "Set Start" on admin page)
     //     This is class-specific, e.g. White Sail 1 at 11:00, White Sail 2 at 11:10
     //  2. General course start time from race_day_settings (set via "Select Course")
     //     This is the same for all classes — used as a fallback before class times are set
-    //  3. Nothing — no times set yet
+    //  3. Nothing — no times set yet, return SizedBox.shrink [F33]
+    
+    // The subtitle changes to indicate which time source is being shown,
+    // so the competitor knows whether this is their specific class time
+    // or the general first-start time for the whole race.
+    // Reference: Conditional widget rendering in Column children [F15]
+    // Reference: Dart nullable types and null checks [F8]
+    // Reference: String.substring to trim "HH:MM:SS" to "HH:MM" [F8]
 
+    // Time to display — will be set from per-class or course-level start time [F8]
     String? displayTime;
+    // Subtitle text shown below the time — changes based on which source is used
     String subtitle = "Scheduled start";
 
     if (boatStart != null && boatStart!["start_time"] != null) {
       // Per-class time exists — show that (most accurate)
       // start_time comes as "HH:MM:SS" from the backend
       final startTimeStr = boatStart!["start_time"] as String;
-      // Strip seconds: "HH:MM:SS" -> "HH:MM" for cleaner display
+      // Strip seconds: "HH:MM:SS" - "HH:MM" for cleaner display
       displayTime = startTimeStr.length >= 5
           ? startTimeStr.substring(0, 5)
           : startTimeStr;
@@ -760,6 +855,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
       subtitle = "Scheduled start";
     }
 
+    // If we have a time to display (from either source), render the card [F19]
     if (displayTime != null) {
       return Card(
         color: AppTheme.primary,
@@ -801,7 +897,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
       );
     }
 
-    // ── No data at all — no start time set, no sequence fired ──
+    // No data at all — no start time set, no sequence fired 
     // Don't clutter the page; return empty space.
     return const SizedBox.shrink();
   }
@@ -853,6 +949,10 @@ class _UserBoatPageState extends State<UserBoatPage> {
             // Show the per-class start time if the admin has set one,
             // otherwise show the general course start time labelled as "First start"
             // so the competitor isn't confused by two different times on the page.
+            // This uses Dart's inline if/else inside a Column children list.
+            // Reference: Conditional widget rendering (collection if) [F15]
+            // Reference: String.substring to trim "HH:MM:SS" to "HH:MM" for display [F8]
+            // Reference: Dart null-aware checks on nullable Map fields [F8]
             if (boatStart != null && boatStart!["start_time"] != null)
               Text("Your start: ${(boatStart!["start_time"] as String).substring(0, 5)}")
             else
@@ -967,16 +1067,35 @@ class _UserBoatPageState extends State<UserBoatPage> {
   }
 }
 
-// Reference: StatefulWidget for async data loading [F14]
-// Reference: Multiple async data sources with independent error handling [F8]
-// Reference: Timer.periodic for live countdown synchronization [F23]
-// Reference: DataTable for results display with conditional styling [F6]
-// Reference: Card layout for modular content sections [F19]
-// Reference: ListView for scrollable content [F5]
-// Reference: Dio HTTP client with query parameters [D1][D3]
-// Reference: UTC timezone handling for server sync [B10]
-// Reference: FastAPI query parameters for filtering [B11]
-// Reference: Scaffold structure for page layout [F3]
-// Reference: WidgetsBinding.addPostFrameCallback for post-build dialog [F14]
-// Reference: showDialog for check-in confirmation [F9]
-// Reference: Chip widget for check-in status display [F28]
+
+// References — This file uses the following sources (full details in
+// the Iteration Documentation reference list)
+
+// Flutter / Dart:
+// [F1] Google LLC, 2025. Flutter: Introduction to widgets.
+// [F3] Google LLC, 2025. Scaffold class.
+// [F5] Google LLC, 2025. ListView & ListTile.
+// [F6] Google LLC, 2025. DataTable class.
+// [F7] Google LLC, 2025. Dialogs & SnackBar.
+// [F8] Google LLC, 2025. Dart language tour: async, futures & Duration.
+// [F15] Google LLC, 2025. Dart language: collection if / list literals.
+// [F19] Google LLC, 2025. Card class.
+// [F20] Google LLC, 2025. Column class.
+// [F23] Dart Team, 2025. Timer class and Timer.periodic.
+// [F31] Dart Team, 2025. DateTime class - parse, toUtc, difference, isAfter.
+// [F32] Dart Team, 2025. Duration class - arithmetic, comparison, inSeconds.
+// [F33] Google LLC, 2025. SizedBox.shrink constructor.
+// [F34] Google LLC, 2025. debugPrint property.
+// [F35] Dart Team, 2025. Set class, unordered collection of unique values.
+// [F36] Google LLC, 2025. StatefulWidget lifecycle, initState, dispose, mounted.
+// [F37] Google LLC, 2025. Chip class.
+// [F38] Google LLC, 2025. WidgetsBinding.addPostFrameCallback.
+
+// Dio HTTP:
+// [D1] Flutter Community, 2025. Dio package for Dart/Flutter.
+// [D3] Flutter Community, 2025. Dio request methods (GET, POST, DELETE).
+
+// Backend:
+// [B1] Tiangolo, S., 2024. FastAPI – Query Parameters.
+// [B12] SQLAlchemy, 2026. ORM-Enabled INSERT, UPDATE, DELETE statements.
+

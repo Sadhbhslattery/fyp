@@ -15,7 +15,7 @@ import 'theme/app_theme.dart'; // Imports custom dark theme
 void main() => runApp(const MyApp());
 // This is the very first line of code that executes when the app launches. The main() function is required in every Dart program.
 // void main(): The function signature (returns nothing)
-// => : Arrow syntax for single-expression functions (shorthand)
+// the arrow syntax for single-expression functions (shorthand)
 // runApp(...): Flutter function that inflates the given widget and displays it on screen
 // const MyApp(): Creates an instance of the MyApp widget (defined below)
 
