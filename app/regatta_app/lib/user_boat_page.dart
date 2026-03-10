@@ -1077,7 +1077,7 @@ class _UserBoatPageState extends State<UserBoatPage> {
 // [F3] Google LLC, 2025. Scaffold class.
 // [F5] Google LLC, 2025. ListView & ListTile.
 // [F6] Google LLC, 2025. DataTable class.
-// [F7] Google LLC, 2025. Dialogs & SnackBar.
+// [F7] Google LLC, 2025. Dialogs & SnackBar.npx vercel 
 // [F8] Google LLC, 2025. Dart language tour: async, futures & Duration.
 // [F15] Google LLC, 2025. Dart language: collection if / list literals.
 // [F19] Google LLC, 2025. Card class.
